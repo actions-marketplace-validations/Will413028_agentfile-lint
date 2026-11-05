@@ -7,6 +7,12 @@ extends = []
 
 [discover]
 globs = ["AGENTS.md", "**/AGENTS.md", "CLAUDE.md", "**/CLAUDE.md"]
+# SKILL.md files are a family of their own: only the S rules run on them, and R and C rules never do.
+skill_globs = ["**/SKILL.md"]
+# Claude Code settings files (H rules): read from the directory a session starts in, at any depth.
+hooks_globs = ["**/.claude/settings.json", "**/.claude/settings.local.json"]
+# Project MCP servers (M rules): only the repository root's .mcp.json.
+mcp_globs = [".mcp.json"]
 
 [allowlist]
 max_days = 90     # reject `expires` later than today + max_days
@@ -176,3 +182,85 @@ candidate_patterns = [
 level = "off"
 mode = "import-only"
 import_line = "@AGENTS.md"
+
+# ---------------------------------------------------------------------------------------------
+# S1 to S12: SKILL.md (docs/rules.md, "S1 to S12 SKILL.md"; docs/adr/0007). Each id protects one or
+# both readers; `targets` names the readers this repository writes for, and an id none of them reads
+# does not run, whatever its level or an override says.
+#   claude-code: Claude Code (S1 to S4, S12)
+#   agentskills: claude.ai upload, the Skills API and the Agent Skills specification (S1, S2, S5 to S11)
+# A repository that uploads its skills sets `targets = ["claude-code", "agentskills"]`.
+# ---------------------------------------------------------------------------------------------
+[skills]
+targets = ["claude-code"]
+
+[rules.S1]
+level = "warn"
+
+[rules.S2]
+level = "warn"
+
+[rules.S3]
+level = "warn"
+
+[rules.S4]
+level = "warn"
+
+[rules.S5]
+level = "warn"
+
+[rules.S6]
+level = "warn"
+
+[rules.S7]
+level = "warn"
+
+[rules.S8]
+level = "warn"
+
+[rules.S9]
+level = "warn"
+
+[rules.S10]
+level = "warn"
+
+[rules.S11]
+level = "warn"
+
+[rules.S12]
+level = "warn"
+
+# ---------------------------------------------------------------------------------------------
+# H1 to H6: hooks in Claude Code settings files; M1 to M4: .mcp.json (docs/rules.md, "H1 to H6
+# hooks" and "M1 to M4 .mcp.json"). Only what the Claude Code docs state and what makes Claude Code
+# skip the file or an entry; optional fields and other keys are not checked.
+# ---------------------------------------------------------------------------------------------
+[rules.H1]
+level = "warn"
+
+[rules.H2]
+level = "warn"
+
+[rules.H3]
+level = "warn"
+
+[rules.H4]
+level = "warn"
+
+[rules.H5]
+level = "warn"
+
+[rules.H6]
+level = "warn"
+
+[rules.M1]
+level = "warn"
+
+[rules.M2]
+level = "warn"
+
+[rules.M3]
+level = "warn"
+
+[rules.M4]
+level = "warn"

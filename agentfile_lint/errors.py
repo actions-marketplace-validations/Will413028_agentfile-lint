@@ -48,6 +48,15 @@ def expect_str_list(value: Any, where: str, allow_empty: bool = False) -> list[s
     return [expect_str(v, f"{where}[{i}]") for i, v in enumerate(value)]
 
 
+def levels_only(tables: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """The effective tables of rule ids whose `[rules.<id>]` table takes only `level`."""
+    effective = {}
+    for rule_id, table in tables.items():
+        check_keys(table, {"level"}, f"rules.{rule_id}")
+        effective[rule_id] = {"level": table["level"]}
+    return effective
+
+
 def expect_bool(value: Any, where: str) -> bool:
     if not isinstance(value, bool):
         raise ConfigError(f"{where}: expected true or false")

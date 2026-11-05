@@ -56,6 +56,8 @@ services/api/AGENTS.md:5: warning: R6: possible copied constant '`MAX_RETRIES = 
 | `R5b` | off | warn | identical lines in sibling files |
 | `R6` | off | warn | candidates for constants copied from code (heuristic, always a warning) |
 | `C1` | off | warn | `CLAUDE.md` is only the line `@AGENTS.md` (`import-only`) or absent (`forbid`) |
+| `S1`–`S4`, `S12` | warn | warn | `SKILL.md` for Claude Code: frontmatter is valid YAML, under 500 lines, `description` plus `when_to_use` within 1536 characters, `metadata` is a map, no character Claude Code refuses in `name` or the directory name |
+| `S5`–`S11` | not run | not run | `SKILL.md` for claude.ai upload and the Skills API (`[skills] targets`, below): frontmatter present, `name` and `description` limits, `name` equals its directory, only the specification's six keys |
 | `allowlist` | error | error | exceptions: expired, no-longer-needed or miscounted (`count` above or below the findings) allowlist entries fail, entries warn before they expire; an override glob that matches no file warns |
 | `disable` | error | error | per-line directives: a malformed one fails, one that suppresses nothing warns |
 
@@ -77,6 +79,34 @@ extend_globs = ["GEMINI.md", "**/GEMINI.md", ".github/copilot-instructions.md"]
 - With `preset:strict`, R5a compares files of different names too, so a `GEMINI.md` that copies the
   `AGENTS.md` next to it is reported line by line. The default compares only same-name files.
 
+### Skills
+
+`SKILL.md` files (`**/SKILL.md`) are checked by the S rules only; no R or C rule runs on them. Claude
+Code and the Agent Skills specification read them differently: Claude Code ignores fields it does not
+know and accepts a `name` that differs from the directory, while claude.ai upload and the Skills API
+reject any key outside the specification's six. The default checks for Claude Code; if you also upload
+your skills, add the second reader:
+
+```toml
+[skills]
+targets = ["claude-code", "agentskills"]
+```
+
+`[discover] skill_globs` replaces the `SKILL.md` glob list and `extend_skill_globs` adds to it, as
+`globs` and `extend_globs` do for instruction files. Details: [`docs/rules.md`](docs/rules.md#s1-to-s12-skillmd).
+
+### Hooks and MCP settings
+
+Claude Code settings files (`**/.claude/settings.json` and `**/.claude/settings.local.json`; the local
+one is usually git-ignored, so only `--no-git` reaches it) are
+checked by the H rules and the root `.mcp.json` by the M rules: that each is valid JSON, that hooks use
+documented event names and handler types with their required fields, that a command hook has a
+command, and that each MCP server has a known `type` and its `command` or `url`. These are the cases in
+which Claude Code skips the file or the entry, often with no sign during a session. Optional fields
+and other settings keys are not checked. `hooks_globs`/`extend_hooks_globs` and
+`mcp_globs`/`extend_mcp_globs` in `[discover]` change the file lists. Details:
+[`docs/rules.md`](docs/rules.md#h1-to-h6-hooks).
+
 ### Compared with similar tools
 
 From each tool's own documentation, checked 2026-11-03; nothing here was installed or run. "Not
@@ -84,8 +114,8 @@ documented" means the documentation does not say, not that the feature is missin
 
 | | agentfile-lint | [agnix](https://github.com/agent-sh/agnix) | [ctxlint](https://github.com/YawLabs/ctxlint) | [agentlinter](https://github.com/seojoonkim/agentlinter) |
 |---|---|---|---|---|
-| Runs on | Python 3.11+, standard library only | Rust binary (npm, brew, pip, cargo) | Node (`npx`), no runtime dependencies | Node 18+ (`npx`) |
-| Files | `AGENTS.md`, `CLAUDE.md`; others by glob | `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, hooks, MCP, Cursor, Copilot, more | context files of 16 tools, MCP config | `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, Cursor, Copilot, more |
+| Runs on | Python 3.11+, nothing to install (standard library plus a vendored copy of PyYAML) | Rust binary (npm, brew, pip, cargo) | Node (`npx`), no runtime dependencies | Node 18+ (`npx`) |
+| Files | `AGENTS.md`, `CLAUDE.md`, `SKILL.md`; others by glob | `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, hooks, MCP, Cursor, Copilot, more | context files of 16 tools, MCP config | `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, Cursor, Copilot, more |
 | Shared config | `extends` presets and files | `extend` base files | not documented | `extends` of the built-in preset |
 | Exceptions | allowlist entries need a reason and an expiry date, expired or unneeded entries fail; path overrides need a reason and raise a level only with `raise = true`; per-line directives need a reason, unused ones warn | disabled rules, per-file overrides, inline comments | ignored rules with an optional reason; unused ones reported | ignored paths |
 | Vendored copy | reproducible directory with a hash check | not documented | not documented | not documented |

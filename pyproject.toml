@@ -18,4 +18,4 @@ agentfile-lint = "agentfile_lint.cli:main"
 include = ["agentfile_lint*"]
 
 [tool.setuptools.package-data]
-agentfile_lint = ["presets/*.toml", "_vendor/*.txt"]
+agentfile_lint = ["presets/*.toml", "_vendor/*.txt", "_yaml/LICENSE", "_yaml/PROVENANCE"]

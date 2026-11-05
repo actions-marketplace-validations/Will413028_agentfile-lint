@@ -93,7 +93,7 @@ def list_files(root: Path, use_git: bool = True) -> list[str]:
     return tracked_files(root) if use_git else walked_files(root)
 
 
-def instruction_files(root: Path, globs: list[str], files: list[str]) -> list[str]:
+def matching_files(root: Path, globs: list[str], files: list[str]) -> list[str]:
     """Files from `files` (`list_files`) matching `globs` that exist in the working tree (staged
     deletions skipped)."""
     return [p for p in files if matches(p, globs) and (root / p).is_file()]

@@ -1,6 +1,6 @@
 """agentfile-lint, vendored copy. Run: python3 agentfile-lint.py [options]
 
-Standard library only. Verify the copy first with: python3 verify.py
+Standard library plus the vendored PyYAML (agentfile_lint/_yaml). Verify the copy first with: python3 verify.py
 """
 import os
 import sys

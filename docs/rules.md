@@ -31,6 +31,28 @@ new ids.
 | [R5b](#r5a-and-r5b-duplicates) | `sibling-duplicates` | lines repeated in other files | heuristic | off | warn |
 | [R6](#r6-copied-constants) | `constants` | values copied from code | heuristic | off | warn |
 | [C1](#c1-claudemd) | `claude-md` | `CLAUDE.md` only imports `AGENTS.md` | convention | off | warn |
+| [S1](#s1-to-s12-skillmd) | `skill-yaml` | `SKILL.md` frontmatter is valid YAML and a mapping | objective | warn | same |
+| [S2](#s1-to-s12-skillmd) | `skill-lines` | `SKILL.md` has fewer than 500 lines | objective | warn | same |
+| [S3](#s1-to-s12-skillmd) | `skill-listing-chars` | `description` plus `when_to_use` fit 1536 characters | objective | warn | same |
+| [S4](#s1-to-s12-skillmd) | `skill-metadata-map` | `metadata` is a map | objective | warn | same |
+| [S5](#s1-to-s12-skillmd) | `skill-frontmatter` | `SKILL.md` has frontmatter | objective, `agentskills` target | warn, not run | same |
+| [S6](#s1-to-s12-skillmd) | `skill-name-length` | `name` is 1 to 64 characters | objective, `agentskills` target | warn, not run | same |
+| [S7](#s1-to-s12-skillmd) | `skill-name-chars` | `name` characters | objective, `agentskills` target | warn, not run | same |
+| [S8](#s1-to-s12-skillmd) | `skill-name-dir` | `name` equals the directory name | objective, `agentskills` target | warn, not run | same |
+| [S9](#s1-to-s12-skillmd) | `skill-description` | `description` is 1 to 1024 characters | objective, `agentskills` target | warn, not run | same |
+| [S10](#s1-to-s12-skillmd) | `skill-compatibility` | `compatibility` is 1 to 500 characters | objective, `agentskills` target | warn, not run | same |
+| [S11](#s1-to-s12-skillmd) | `skill-keys` | only the specification's six frontmatter keys | objective, `agentskills` target | warn, not run | same |
+| [S12](#s1-to-s12-skillmd) | `skill-name-refused` | no character Claude Code refuses in `name` or the directory name | objective | warn | same |
+| [H1](#h1-to-h6-hooks) | `settings-json` | a settings file is valid JSON and an object | objective | warn | same |
+| [H2](#h1-to-h6-hooks) | `hooks-event` | hook event names are documented ones | objective | warn | same |
+| [H3](#h1-to-h6-hooks) | `hooks-shape` | `hooks`, event lists, matcher groups and handler lists have the documented shape | objective | warn | same |
+| [H4](#h1-to-h6-hooks) | `hooks-type` | every hook handler has a documented `type` | objective | warn | same |
+| [H5](#h1-to-h6-hooks) | `hooks-required` | every hook handler has its type's required fields | objective | warn | same |
+| [H6](#h1-to-h6-hooks) | `hooks-empty-command` | a command hook's `command` is not empty | objective | warn | same |
+| [M1](#m1-to-m4-mcpjson) | `mcp-json` | `.mcp.json` is valid JSON and an object | objective | warn | same |
+| [M2](#m1-to-m4-mcpjson) | `mcp-servers` | servers sit under an `mcpServers` object | objective | warn | same |
+| [M3](#m1-to-m4-mcpjson) | `mcp-type` | every server entry is an object with a documented `type` | objective | warn | same |
+| [M4](#m1-to-m4-mcpjson) | `mcp-required` | every server has `command` (stdio) or `url` | objective | warn | same |
 | [allowlist](#allowlist) | — | exceptions are current and still needed | objective | error | error |
 | [disable](#disable) | — | per-line directives are well formed and still needed | objective | error | error |
 
@@ -199,7 +221,7 @@ did not recognize as the import. 0.5.0 with `preset:strict` reports 26 of them.
 Why: a debt exception without an end date becomes permanent without anyone deciding so. Every allowlist
 entry has a reason and an expiry date at most `max_days` (90) ahead; an expired entry, or one that no
 longer suppresses anything, fails. A path that is meant to differ for good goes in `[[overrides]]`
-instead, with a required reason; each glob of an override that matches no analyzed instruction file is
+instead, with a required reason; each glob of an override that matches no analyzed file is
 a warning on the config file that wrote it (an inherited one is removed with `unset`), so a stale
 override shows up without failing CI unless `--warn-as-error` is given.
 
@@ -221,8 +243,152 @@ Default: on; with no directives it reports nothing. No level or override changes
 
 Measured: objective, so no false-positive rate.
 
+## S1 to S12 SKILL.md
+
+Why: a `SKILL.md` has two kinds of reader, and they disagree. Claude Code ignores a frontmatter field
+it does not know, takes a `name` that differs from the directory (or no `name` at all), and when the
+YAML does not parse it still loads the skill, with no fields set, so Claude cannot match the
+`description`
+([Claude Code skills](https://code.claude.com/docs/en/skills), "Frontmatter reference", "Skill not
+triggering"). claude.ai upload, the Skills API and `package_skill.py` follow the
+[Agent Skills specification](https://agentskills.io/specification) and fail with a hard error on any
+key outside its six (`name`, `description`, `license`, `compatibility`, `metadata`, `allowed-tools`)
+(the same page, "Using skill frontmatter outside Claude Code"). So every S id belongs to the readers
+it protects, and `[skills] targets` names the readers a repository writes for:
+
+| Id | Reader | Finding | Source |
+|---|---|---|---|
+| S1 | both | the frontmatter is not valid YAML (reported at the parse error's line), has no closing `---`, or is not a mapping | Claude Code: "If the YAML between the markers doesn't parse, the skill still loads with no fields set"; specification: "must contain YAML frontmatter" |
+| S2 | both | the file has 500 lines or more (whole file, counted like R1b) | both: "Keep `SKILL.md` under 500 lines" |
+| S3 | `claude-code` | `description` and `when_to_use` together are more than 1536 characters | Claude Code: "the combined `description` and `when_to_use` text is truncated at 1,536 characters in the skill listing" |
+| S4 | `claude-code` | `metadata` is present and not a map | Claude Code: "drops a value that isn't a map" |
+| S5 | `agentskills` | no frontmatter: the first line is not `---` | specification: "must contain YAML frontmatter" |
+| S6 | `agentskills` | `name` is missing, not a string, empty, or longer than 64 characters | specification: "Must be 1-64 characters" |
+| S7 | `agentskills` | `name` is not lowercase, has a character other than a letter, digit or `-`, starts or ends with `-`, or contains `--` | specification, `name` field |
+| S8 | `agentskills` | `name` differs from the name of the directory that holds the file (not checked for a `SKILL.md` at the repository root, whose directory name depends on the checkout) | specification: "Must match the parent directory name" |
+| S9 | `agentskills` | `description` is missing, not a string, blank, or longer than 1024 characters | specification: "Must be 1-1024 characters" |
+| S10 | `agentskills` | `compatibility` is present and not a string of 1 to 500 characters | specification: "Must be 1-500 characters if provided" |
+| S11 | `agentskills` | a top-level key outside the six | Claude Code, "Using skill frontmatter outside Claude Code" |
+| S12 | `claude-code` | `name`, or the name of the directory that holds the file, has a character Claude Code refuses: `<` or `>`; a control or format character (zero-width, direction-changing); a private-use or unassigned character; a blank other than a plain space; a space at the start or end or two in a row | Claude Code, "Characters a skill name can't hold": a refused `name` is not shown in the `/` menu and does not invoke the skill; a refused directory name keeps the skill from loading, except in a plugin's `skills/`, where the characters become hyphens |
+
+Default: `targets = ["claude-code"]`, so S5 to S11 do not run; the levels are all `warn`. A repository
+that uploads its skills to claude.ai or the Skills API sets `targets = ["claude-code", "agentskills"]`.
+`targets = []` runs no S id, and `[discover] skill_globs = []` stops discovering `SKILL.md` files.
+An id that no listed reader reads does not run whatever its level, and an override cannot turn it on.
+
+Readings:
+
+- YAML is parsed by the vendored PyYAML 6.0.3 (docs/adr/0007), and every scalar is read as its text,
+  without YAML 1.1 type resolution: `description: yes` is the string `yes` and `version: 2026-02-30`
+  is not an error, as YAML 1.2 parsers read them; `name: 12` is the name `12`, as `skills-ref`'s
+  strictyaml reads it (YAML 1.1 and the YAML 1.2 core schema read the number 12). Merge keys (`<<`)
+  are applied. A duplicate key is S1, as YAML 1.2 parsers and strictyaml reject it; a mapping key
+  that is not a scalar (`[a, b]: 1`) is S1 too, without a claim about Claude Code, since readers
+  differ on it. A block-scalar `name` (`name: |`) is read without its final line break. Flow collections (`[a, b]`) are valid YAML, read by both readers, and not
+  reported; `skills-ref` rejects them because strictyaml does. An empty frontmatter block is no
+  fields, not an error.
+- Lengths count Unicode characters (code points) after YAML parsing. S6 to S8 compare `name` after
+  stripping surrounding blanks and NFKC normalization.
+- S7 follows `skills-ref` rather than the specification's `a-z` example: the specification says
+  "unicode lowercase alphanumeric characters (a-z, 0-9)", which reads two ways, and `skills-ref`
+  accepts any Unicode lowercase letter or digit (`données` passes).
+- S3's 1536 is Claude Code's default; Claude Code's `skillListingMaxDescChars` setting changes it, and
+  this tool does not read Claude Code settings. If you raised the cap, turn S3 off for those paths
+  with an override.
+- S10 also reports an empty string, which the specification excludes and `skills-ref` accepts.
+- S12 follows the documented list; which code points count as unassigned follows the Unicode version
+  of the Python that runs the check.
+- Not checked: the types of `metadata` values (`skills-ref` does not check them and neither reader
+  breaks on them); fields only Claude Code reads.
+
+Per-line directives cannot name S ids (docs/design.md, File families); use an allowlist entry or an
+override.
+
+Measured: objective, so no false-positive rate. On the 22-repository sample of docs/field-report.md
+(1695 `SKILL.md` files, 2026-11-06): with the default `claude-code` target, S1 reports 1 file, S2
+199 files in 8 repositories and S12 none; with `agentskills` added, S5 reports 4, S7 30, S8 29, S10 3 and S11 877
+files. Compared file by file with `skills-ref` (which fails 929 files), 1435 files get the same
+verdict and the same checks; the other 260 all use a flow collection that strictyaml rejects (S1
+there, valid YAML here, so those files show only their other findings, mostly S11). R and C findings
+on the sample are the same as 0.8.0's.
+
+## H1 to H6 hooks
+
+Why: Claude Code reads hooks from the `hooks` key of its settings files, and a hook it cannot load
+does not run, usually without a sign during the session: Claude Code reports it at startup or in
+`claude doctor` and goes on without it
+([settings](https://code.claude.com/docs/en/settings), "Fix a broken settings file"). Files:
+`[discover] hooks_globs`, default `**/.claude/settings.json` and `**/.claude/settings.local.json`
+(Claude Code reads `.claude/settings.json` from the directory a session starts in, so a nested project
+directory has its own; `settings.local.json` is usually git-ignored and is then reached only with
+`--no-git`). `extend_hooks_globs` adds to the list; `hooks_globs = []` turns the family off. Only the H
+rules run on these files.
+
+| Id | Finding | Source | What Claude Code does (`claude doctor`, 2.1.318) |
+|---|---|---|---|
+| H1 | the file is not valid JSON (reported at the error's line), or its top-level value is not an object | settings, "Fix a broken settings file": "invalid JSON" is a Settings Error | does not apply the file ("Invalid or malformed JSON") |
+| H2 | a key of `hooks` is not a documented event name (names are case-sensitive) | [hooks reference](https://code.claude.com/docs/en/hooks), "Hook lifecycle": 33 events | ignores that event's hooks ("Unknown hook event … was ignored") |
+| H3 | `hooks` is not an object; an event's value is not an array; a matcher group is not an object, has no `hooks` array, or has a `matcher` that is not a string; a handler is not an object | settings reference, `hooks`: "object keyed by hook event; each value is an array of `{ "matcher", "hooks" }` groups" | ignores that level |
+| H4 | a handler has no `type`, or one other than `command`, `http`, `mcp_tool`, `prompt`, `agent` | hooks reference, "Common fields": `type` required | ignores the handler |
+| H5 | a handler lacks a field its type marks required, or has it as a non-string: `command` (command), `url` (http), `server` and `tool` (mcp_tool), `prompt` (prompt, agent) | hooks reference, "Hook handler fields" tables | ignores the handler |
+| H6 | a command hook's `command` is empty or blank | hooks reference, `command`: "Shell command to execute" | loads it without a warning; it runs no program |
+
+Under `PreToolUse` and `PermissionRequest`, an H3 to H5 failure is wider: `claude doctor` says such a
+hook "may be what guards the permissions declared beside it, so nothing it sits in is applied until the
+entry is fixed or removed", and the message says so. An unknown event (H2) is not checked further.
+
+Readings:
+
+- JSON is read as Claude Code reads it (measured): a leading UTF-8 byte order mark is accepted, an
+  empty or blank file is no settings, and `NaN`, `Infinity`, comments and trailing commas are invalid
+  (JavaScript's `JSON.parse` rejects them). A file nested too deeply for Python's parser is H1 with a
+  message that it was not checked.
+- Positions are JSON paths in the form `claude doctor` prints (`hooks.PreToolUse.0.hooks.1`); the line
+  is the whole file except for H1's syntax error.
+- Not checked: the types of optional fields (`timeout`, `async`, `args`, `if` and the rest; Claude Code
+  drops a handler whose optional field has the wrong type, but following every optional field is a
+  key table that changes with each Claude Code release), whether an http hook's `url` is a URL Claude
+  Code accepts (it ignores the hook when not, an empty `url` included; URL parsing is not a required-field
+  check), empty `prompt`, `server` or `tool` (Claude Code loads them), other settings keys, `matcher`
+  syntax, and hooks in plugin `hooks/hooks.json`, skill or subagent frontmatter.
+
+Per-line directives cannot name H ids (JSON has no comments); use an allowlist entry or an override.
+
+Measured: objective, so no false-positive rate. On the 22-repository sample of docs/field-report.md
+(2026-11-06), the default globs find 5 settings files in 4 repositories, all valid, with H findings
+in none; R, C and S findings are the same as before the H rules.
+
+## M1 to M4 .mcp.json
+
+Why: a project's `.mcp.json` is how a team shares MCP servers, and Claude Code skips a server it
+cannot read, or the whole file, reporting it only in `claude mcp list` and `/mcp`
+([MCP](https://code.claude.com/docs/en/mcp), "Project scope", "Configuration warnings"). Files:
+`[discover] mcp_globs`, default `.mcp.json` at the repository root only: Claude Code reads project MCP
+servers from there, and a plugin's `.mcp.json` has another format (servers at the top level, no
+`mcpServers` key), so adding plugin paths with `extend_mcp_globs` reports M2 on each.
+`mcp_globs = []` turns the family off. Only the M rules run on these files.
+
+| Id | Finding | Source | What Claude Code does (`claude mcp list`, 2.1.318) |
+|---|---|---|---|
+| M1 | the file is not valid JSON (reported at the error's line), or its top-level value is not an object | MCP, "Project scope": the file's format | loads no server from it ("MCP config is not a valid JSON") |
+| M2 | no `mcpServers` object: missing, another type, or servers under `servers` (VS Code's format) | [debug your config](https://code.claude.com/docs/en/debug-your-config): servers under `servers` "never load" | loads no server from the file |
+| M3 | a server entry is not an object, or its `type` is not `stdio`, `http`, `streamable-http`, `sse` or `ws`; `"sdk"` is named separately | MCP, "Add a remote WebSocket server" and the transports; `"sdk"`: "Claude Code skips a `"type": "sdk"` entry in `.mcp.json`" | skips the server |
+| M4 | a stdio server (no `type`, or `"stdio"`) has no non-empty string `command`, or a remote server has no string `url`; an entry with a `url` and no `type` says to add one | MCP: "A JSON entry that has a `url` but no `type` is a configuration error"; the required fields are what `claude mcp list` reports | skips the server ("command: expected string", "Command cannot be empty", "url: expected string") |
+
+Readings:
+
+- JSON is read as for H1. Positions are JSON paths (`mcpServers.<name>`).
+- M4's required fields are measured, not stated in the MCP docs, which show them in every example.
+- Not checked: optional fields and their types (`args`, `env`, `headers`, `timeout` and the rest),
+  blank values Claude Code only warns about (a `command` of spaces, an empty `url`), reserved server
+  names, unset `${VAR}` references, and `.mcp.json` files in plugins.
+
+Measured: objective, so no false-positive rate. On the 22-repository sample (2026-11-06), the default
+glob finds 2 root `.mcp.json` files, both valid, with M findings in none; a third `.mcp.json` in the
+sample sits in a plugin directory, in the plugin format, and is not matched.
+
 ## Rule ids for other files
 
-Planned, not implemented: rules for other file types get an id prefix per family, so ids stay unique
-as checks are added: `S` for `SKILL.md`, `H` for hooks, `M` for MCP configuration. `R` and `C` stay with
+Rules for other file types get an id prefix per family, so ids stay unique as checks are added: `S` for
+`SKILL.md`, `H` for hooks in settings files and `M` for `.mcp.json` (above). `R` and `C` stay with
 instruction files, and `E` is reserved for input errors such as `E0`.

@@ -30,6 +30,18 @@ def verify(dest):
     return subprocess.run([sys.executable, "-I", str(Path(dest) / "verify.py")], capture_output=True, text=True)
 
 
+class PackageDataTest(unittest.TestCase):
+    def test_wheel_ships_the_vendored_notices(self):
+        # The wheel carries non-Python files only through package-data; the copy and the wheel must agree.
+        import tomllib
+        from agentfile_lint.vendor import VENDORED_NOTICES
+        data = tomllib.loads((helpers.REPO / "pyproject.toml").read_text(encoding="utf-8"))
+        shipped = data["tool"]["setuptools"]["package-data"]["agentfile_lint"]
+        for name in VENDORED_NOTICES:
+            self.assertIn(name, shipped)
+            self.assertTrue((helpers.REPO / "agentfile_lint" / name).is_file(), name)
+
+
 class VendorTest(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="il-vendor-"))
@@ -49,7 +61,13 @@ class VendorTest(unittest.TestCase):
         self.assertIn("agentfile_lint/presets/default.toml", files)
         self.assertFalse([n for n in files if "__pycache__" in n or n.endswith(".pyc")])
         self.assertNotIn("agentfile_lint/vendor.py", files)
+        # The vendored PyYAML travels with its license and source record, byte for byte.
+        for name in ("__init__.py", "loader.py", "LICENSE", "PROVENANCE"):
+            self.assertEqual(files[f"agentfile_lint/_yaml/{name}"],
+                             (helpers.REPO / "agentfile_lint" / "_yaml" / name).read_bytes(), name)
+        self.assertNotIn("agentfile_lint/_yaml/cyaml.py", files)
         readme = files["README.md"].decode()
+        self.assertIn("vendored PyYAML", readme)
         self.assertIn("`v9.9.9`", readme)
         self.assertIn("a" * 40, readme)
         self.assertIn("accidental modification", readme)
@@ -57,20 +75,25 @@ class VendorTest(unittest.TestCase):
         self.assertIn("pull request diff is the review point", readme)
         self.assertIn("keeps no\nupgrade script", readme)
         blob = b"\n".join(files.values())
-        needles = [str(self.tmp), str(helpers.REPO), tempfile.gettempdir()]
+        for needle in (str(self.tmp), str(helpers.REPO), tempfile.gettempdir()):
+            self.assertNotIn(needle.encode(), blob, needle)
+        # The vendored PyYAML is byte-identical to upstream (checked above); its English prose may
+        # contain any short word, so the user-name and timestamp checks cover only our own files
+        # (PROVENANCE is ours).
+        upstream = {n for n in files if n.startswith("agentfile_lint/_yaml/") and not n.endswith("/PROVENANCE")}
+        own = b"\n".join(c for n, c in files.items() if n not in upstream)
         for who in {getpass.getuser(), os.environ.get("USER", "")} - {""}:
             if len(who) > 3:
-                needles.append(who)
-        for needle in needles:
-            self.assertNotIn(needle.encode(), blob, needle)
-        self.assertIsNone(re.search(rb"\b20\d\d-\d\d-\d\d[T ]\d\d:\d\d", blob))
+                self.assertNotIn(who.encode(), own, who)
+        self.assertIsNone(re.search(rb"\b20\d\d-\d\d-\d\d[T ]\d\d:\d\d", own))
 
     def test_verify_passes(self):
         r = verify(self.a)
         self.assertEqual((r.returncode, r.stderr), (0, ""))
 
     def test_verify_fails_on_modified_file(self):
-        for name in ("agentfile_lint/cli.py", "agentfile_lint/presets/default.toml", ENTRY, "verify.py"):
+        for name in ("agentfile_lint/cli.py", "agentfile_lint/presets/default.toml", ENTRY, "verify.py",
+                     "agentfile_lint/_yaml/LICENSE"):
             d = self.tmp / ("m-" + name.replace("/", "_"))
             shutil.copytree(self.a, d)
             with open(d / name, "ab") as fh:

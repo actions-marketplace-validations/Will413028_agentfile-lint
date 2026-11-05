@@ -13,12 +13,15 @@ import re
 from dataclasses import dataclass
 
 from .finding import Finding
-from .rules import ALIASES, MODULES, RETIRED, RULES
+from .rules import ALIASES, FAMILY, FAMILY_FILES, INSTRUCTION, MODULES, RETIRED, RULES
 from .rules._text import prose_lines_raw
 
 RULE_ID = "disable"
 DIRECTIVE = "agentfile-lint-disable-next-line"
 WHOLE_FILE = frozenset(rule_id for module in MODULES for rule_id in getattr(module, "WHOLE_FILE", ()))
+# Directives live in instruction files only (a SKILL.md comment is skill content, JSON has no
+# comments): rules of other families cannot be named in one.
+OTHER_FAMILY = frozenset(rule_id for module in MODULES if FAMILY[module] != INSTRUCTION for rule_id, _, _ in module.CHECKS)
 
 _MARK = "agentfile-lint-disable"
 # Anything that starts like a directive is parsed, so a typo is reported instead of ignored. Up to three
@@ -52,6 +55,10 @@ def _parse(path: str, number: int, line: str) -> Directive | Finding:
             return Finding(path, number, RULE_ID, RETIRED[name])
         if rule not in RULES:
             return Finding(path, number, RULE_ID, f"unknown rule {name!r}")
+        if rule in OTHER_FAMILY:
+            return Finding(path, number, RULE_ID,
+                           f"{rule} checks {FAMILY_FILES[FAMILY[RULES[rule]]]}, which take no directives; "
+                           "use an allowlist entry or an override instead")
         if rule in WHOLE_FILE:
             return Finding(path, number, RULE_ID,
                            f"{rule} is a whole-file rule; use an allowlist entry or an override instead")

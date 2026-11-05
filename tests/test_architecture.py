@@ -5,7 +5,10 @@ import helpers
 
 PACKAGE = "agentfile_lint"
 # What a rule module may import from the package: the core it runs on, never the command layer.
-RULE_ALLOWED = {"context", "discover", "errors", "finding", "rules", "rules._text"}
+RULE_ALLOWED = {"context", "discover", "errors", "finding", "frontmatter", "rules", "rules._json", "rules._text"}
+# Vendored third-party code (PyYAML): its own imports are not checked; only frontmatter.py may use it.
+VENDORED = f"{PACKAGE}._yaml"
+VENDORED_USERS = {f"{PACKAGE}.frontmatter"}
 
 
 def import_graph(root):
@@ -38,6 +41,20 @@ def import_graph(root):
         targets.discard(name)
         graph[name] = targets
     return graph
+
+
+def is_vendored(name):
+    return name == VENDORED or name.startswith(VENDORED + ".")
+
+
+def own_modules(graph):
+    """The graph without the vendored modules' own import edges."""
+    return {name: targets for name, targets in graph.items() if not is_vendored(name)}
+
+
+def vendored_users(graph):
+    """Package modules outside the vendored code that import it."""
+    return {name for name, targets in own_modules(graph).items() if any(is_vendored(t) for t in targets)}
 
 
 def find_cycle(graph):
@@ -77,7 +94,10 @@ def rule_violations(graph):
 
 class ArchitectureTest(unittest.TestCase):
     def test_package_has_no_import_cycle(self):
-        self.assertIsNone(find_cycle(import_graph(helpers.REPO)))
+        self.assertIsNone(find_cycle(own_modules(import_graph(helpers.REPO))))
+
+    def test_only_frontmatter_uses_the_vendored_yaml(self):
+        self.assertEqual(vendored_users(import_graph(helpers.REPO)), VENDORED_USERS)
 
     def test_rules_import_only_the_core(self):
         self.assertEqual(rule_violations(import_graph(helpers.REPO)), [])
@@ -87,6 +107,8 @@ class ArchitectureTest(unittest.TestCase):
         self.assertEqual(find_cycle(graph), ["p.a", "p.b", "p.a"])
         graph = {f"{PACKAGE}.rules.size": {f"{PACKAGE}.cli", f"{PACKAGE}.finding"}}
         self.assertEqual(rule_violations(graph), [f"{PACKAGE}.rules.size -> {PACKAGE}.cli"])
+        graph = {f"{PACKAGE}.rules.skill": {f"{VENDORED}.loader"}, f"{VENDORED}.loader": {f"{VENDORED}.reader"}}
+        self.assertEqual(vendored_users(graph), {f"{PACKAGE}.rules.skill"})
 
 
 if __name__ == "__main__":

@@ -121,7 +121,7 @@ class StaleGlobTest(unittest.TestCase):
         self.assertEqual(
             r.stdout,
             ".agentfile-lint.toml: warning: allowlist: overrides[0]: glob 'gone/**' matches no analyzed "
-            "instruction file; remove it\n",
+            "file; remove it\n",
         )
 
     def test_warn_as_error_fails(self):
@@ -140,7 +140,7 @@ class StaleGlobTest(unittest.TestCase):
         self.assertEqual(
             r.stdout,
             "shared.toml: warning: allowlist: overrides[0] (inherited through extends): glob 'gone/**' matches no "
-            "analyzed instruction file; remove it there, or unset it in the config that extends it\n",
+            "analyzed file; remove it there, or unset it in the config that extends it\n",
         )
 
     def test_unset_removes_the_inherited_glob(self):

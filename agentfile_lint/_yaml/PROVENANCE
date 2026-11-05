@@ -1,0 +1,20 @@
+Vendored third-party code: PyYAML 6.0.3, pure-Python part (MIT, see LICENSE in this directory).
+
+Source:   https://files.pythonhosted.org/packages/source/p/pyyaml/pyyaml-6.0.3.tar.gz
+SHA-256:  d76623373421df22fb4cf8817020cbb7ef15c725b9d5e45f17e189bfc384190f
+Released: 2025-09-25
+
+Files: every lib/yaml/*.py of the sdist except cyaml.py (the libyaml C-extension binding), plus the
+sdist's LICENSE. The files are byte-identical to the sdist; no line is changed. Every import inside
+the package is relative, so no import path needed rewriting, and the missing cyaml.py is absorbed by
+the package's own `try: from .cyaml import *` / `except ImportError` (`__with_libyaml__` is False).
+
+Only agentfile_lint/frontmatter.py imports this package (tests/test_architecture.py checks it).
+
+To re-fetch and compare:
+  curl -sSLO https://files.pythonhosted.org/packages/source/p/pyyaml/pyyaml-6.0.3.tar.gz
+  shasum -a 256 pyyaml-6.0.3.tar.gz
+  tar xzf pyyaml-6.0.3.tar.gz
+  diff -r --exclude=cyaml.py --exclude=__pycache__ --exclude=LICENSE --exclude=PROVENANCE \
+      pyyaml-6.0.3/lib/yaml agentfile_lint/_yaml
+  cmp pyyaml-6.0.3/LICENSE agentfile_lint/_yaml/LICENSE

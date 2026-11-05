@@ -5,6 +5,47 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `agentfile_lint/_yaml/`: the pure-Python part of PyYAML 6.0.3 (MIT), vendored unchanged with its
+  `LICENSE` and a `PROVENANCE` record, and `agentfile_lint/frontmatter.py`, which parses YAML
+  frontmatter with it (`SafeLoader` only) for the coming `SKILL.md` rules. Nothing new to install;
+  `dependencies` stays empty. The vendored copy written by `vendor` now includes `_yaml/` (docs/adr/0007).
+- `SKILL.md` rules S1 to S12, all at `warn`, run on a new file family: `[discover] skill_globs`
+  (default `["**/SKILL.md"]`) and `extend_skill_globs`, which concatenates along `extends` like
+  `extend_globs`. No R or C rule runs on a `SKILL.md`. Each S id belongs to the reader it protects:
+  `claude-code` (S1 to S4 and S12: YAML that parses, fewer than 500 lines, `description` plus `when_to_use` within
+  Claude Code's 1536-character listing, `metadata` a map; S12, no character Claude Code refuses in
+  `name` or the directory name) and `agentskills` (S1, S2 and S5 to S11:
+  claude.ai upload, the Skills API and the Agent Skills specification). The new `[skills] targets`
+  (default `["claude-code"]`) names the readers a repository writes for; S5 to S11 run only with
+  `agentskills` listed, and an unknown target fails the configuration; an empty `targets` or
+  `skill_globs` turns the family off. Frontmatter scalars are read as their text, without YAML 1.1
+  types (docs/rules.md, docs/adr/0007).
+  `config --format json` shows `skills` and the two new `discover` keys; the E0 description now reads
+  "analyzed file".
+- Hook rules H1 to H6 and `.mcp.json` rules M1 to M4, all at `warn`, on two new file families:
+  `[discover] hooks_globs` (default `["**/.claude/settings.json", "**/.claude/settings.local.json"]`)
+  and `mcp_globs` (default `[".mcp.json"]`, the root only), each with an `extend_*` list that
+  concatenates along `extends`; an empty list turns its family off. H: the settings file is valid JSON
+  and an object (H1), event names are documented ones (H2), the documented shape (H3), a known handler
+  `type` (H4), each type's required string fields (H5), a non-empty `command` (H6). M: valid JSON and
+  an object (M1), an `mcpServers` object (M2), a known server `type` (M3), `command` for stdio or
+  `url` for remote servers (M4). Only checks whose failure makes Claude Code skip the file or the
+  entry (measured with `claude doctor` and `claude mcp list` on 2.1.318), plus H6; optional fields
+  are not checked (docs/rules.md). `config --format json` shows the four new `discover` keys.
+
+### Changed
+
+- The `allowlist` notes for an entry or override glob that matches no analyzed file now say "analyzed
+  file" instead of "analyzed instruction file", since SKILL.md, settings and `.mcp.json` files are
+  analyzed too; a directive naming an S, H or M id names that id's file family.
+
+### Fixed
+
+- File names on the command line now start a run when they match any file family's globs. Before,
+  only instruction-file names did, so `agentfile-lint path/to/SKILL.md` printed nothing.
+
 ## [0.8.0] - 2026-11-05
 
 ### Changed (breaking)

@@ -107,7 +107,7 @@ def apply(
             ))
             continue
         if n == 0:
-            why = "file is not an analyzed instruction file" if e.path not in present else f"file no longer violates {e.rule}"
+            why = "file is not an analyzed file" if e.path not in present else f"file no longer violates {e.rule}"
             notes.append(Finding(e.path, 0, RULE_ID, f"entry for {e.rule} is no longer needed ({why}); remove it"))
             continue
         if n > e.count:

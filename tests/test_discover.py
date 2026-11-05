@@ -12,20 +12,20 @@ R1_LINE = {".agentfile-lint.toml": "[rules.R1d]\nlevel = \"error\"\nmax_chars = 
 class DiscoverTest(unittest.TestCase):
     def test_ignores_local_md_files_even_when_tracked(self):
         root = helpers.make_repo({"AGENTS.md": "ok\n", "NOTES.local.md": BIG, "sub/CLAUDE.local.md": BIG, **R1_LINE})
-        self.assertEqual(discover.instruction_files(root, GLOBS, discover.list_files(root)), ["AGENTS.md"])
+        self.assertEqual(discover.matching_files(root, GLOBS, discover.list_files(root)), ["AGENTS.md"])
         self.assertEqual(helpers.run_new(root).returncode, 0)
 
     def test_ignores_untracked_files(self):
         root = helpers.make_repo({"AGENTS.md": "ok\n", **R1_LINE})
         (root / "sub").mkdir()
         (root / "sub" / "AGENTS.md").write_text(BIG)  # not added to git
-        self.assertEqual(discover.instruction_files(root, GLOBS, discover.list_files(root)), ["AGENTS.md"])
+        self.assertEqual(discover.matching_files(root, GLOBS, discover.list_files(root)), ["AGENTS.md"])
         self.assertEqual(helpers.run_new(root).returncode, 0)
 
     def test_finds_nested_agents_and_claude_files(self):
         root = helpers.make_repo({"AGENTS.md": "a", "a/b/AGENTS.md": "a", "CLAUDE.md": "@AGENTS.md\n", "x/CLAUDE.md": "c", "notes.md": "n"})
         self.assertEqual(
-            discover.instruction_files(root, GLOBS, discover.list_files(root)),
+            discover.matching_files(root, GLOBS, discover.list_files(root)),
             ["AGENTS.md", "CLAUDE.md", "a/b/AGENTS.md", "x/CLAUDE.md"],
         )
 

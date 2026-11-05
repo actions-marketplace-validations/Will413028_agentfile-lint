@@ -39,6 +39,10 @@ def _upstream(ref_tag: str | None, ref_commit: str | None) -> tuple[str, str]:
     return tag, commit
 
 
+# Non-Python files of vendored third-party code that the copy must carry (license and source record).
+VENDORED_NOTICES = ("_yaml/LICENSE", "_yaml/PROVENANCE")
+
+
 def _package_files() -> dict[str, bytes]:
     """Relative path (posix) -> content, sorted. Excludes caches and the vendoring machinery."""
     out: dict[str, bytes] = {}
@@ -46,7 +50,9 @@ def _package_files() -> dict[str, bytes]:
         rel = path.relative_to(PKG)
         if "__pycache__" in rel.parts or "_vendor" in rel.parts or not path.is_file():
             continue
-        if rel.as_posix() == "vendor.py" or path.suffix not in (".py", ".toml"):
+        if rel.as_posix() == "vendor.py":
+            continue
+        if path.suffix not in (".py", ".toml") and rel.as_posix() not in VENDORED_NOTICES:
             continue
         out[f"agentfile_lint/{rel.as_posix()}"] = path.read_bytes()
     return out
@@ -60,7 +66,8 @@ def build(tag: str, commit: str) -> dict[str, bytes]:
     manifest = "\n".join(f"{hashlib.sha256(c).hexdigest()}  {n}" for n, c in files.items())
     readme = f"""# agentfile-lint (vendored copy)
 
-A pinned copy of agentfile-lint. Standard library only, Python >= 3.11, no network.
+A pinned copy of agentfile-lint. Standard library plus the vendored PyYAML in `agentfile_lint/_yaml/`
+(MIT, see its LICENSE and PROVENANCE), Python >= 3.11, no network.
 
 - Upstream tag: `{tag}`
 - Upstream commit: `{commit}`

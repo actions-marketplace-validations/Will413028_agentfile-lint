@@ -27,7 +27,36 @@ class ExtendGlobsTest(unittest.TestCase):
             CFG: 'extends = ["base.toml"]\n[discover]\nglobs = ["AGENTS.md"]\nextend_globs = ["B.md"]\n',
         })
         doc = json.loads(helpers.run_new(root, "config").stdout)
-        self.assertEqual(doc["discover"], {"globs": ["AGENTS.md"], "extend_globs": ["A.md", "B.md"]})
+        self.assertEqual(doc["discover"], {
+            "globs": ["AGENTS.md"], "extend_globs": ["A.md", "B.md"], "skill_globs": ["**/SKILL.md"], "extend_skill_globs": [],
+            "hooks_globs": ["**/.claude/settings.json", "**/.claude/settings.local.json"], "extend_hooks_globs": [],
+            "mcp_globs": [".mcp.json"], "extend_mcp_globs": [],
+        })
+
+    def test_hooks_and_mcp_globs_concatenate_the_same_way(self):
+        root = helpers.make_repo({
+            "AGENTS.md": "ok\n",
+            "base.toml": '[discover]\nextend_hooks_globs = ["a.json"]\nextend_mcp_globs = ["m1.json"]\n',
+            CFG: 'extends = ["base.toml"]\n[discover]\nhooks_globs = ["x.json"]\nextend_hooks_globs = ["b.json"]\n'
+                 'extend_mcp_globs = ["m2.json"]\n',
+        })
+        d = json.loads(helpers.run_new(root, "config").stdout)["discover"]
+        self.assertEqual((d["hooks_globs"], d["extend_hooks_globs"]), (["x.json"], ["a.json", "b.json"]))
+        self.assertEqual((d["mcp_globs"], d["extend_mcp_globs"]), ([".mcp.json"], ["m1.json", "m2.json"]))
+
+    def test_skill_globs_concatenate_the_same_way(self):
+        root = helpers.make_repo({
+            "AGENTS.md": "ok\n", "base.toml": '[discover]\nextend_skill_globs = ["a/SKILL.md"]\n',
+            CFG: 'extends = ["base.toml"]\n[discover]\nskill_globs = ["x/SKILL.md"]\nextend_skill_globs = ["b/SKILL.md"]\n',
+        })
+        doc = json.loads(helpers.run_new(root, "config").stdout)
+        self.assertEqual((doc["discover"]["skill_globs"], doc["discover"]["extend_skill_globs"]),
+                         (["x/SKILL.md"], ["a/SKILL.md", "b/SKILL.md"]))
+
+    def test_extend_skill_globs_at_the_top_level_fails(self):
+        r = run({"AGENTS.md": "ok\n", CFG: 'extend_skill_globs = ["a/SKILL.md"]\n'})
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("extend_skill_globs belongs in [discover]", r.stderr)
 
     def test_type_error_fails(self):
         for value in ('"GEMINI.md"', "[1]"):

@@ -134,7 +134,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     findings = []
-    if not args.files or _relevant(args.files, root, cwd, cfg.all_globs):
+    if not args.files or _relevant(args.files, root, cwd, cfg.all_globs()):
         try:
             findings = engine.analyze(root, cfg, today, args.warn_as_error, use_git=not args.no_git)
         except discover.DiscoverError as exc:  # an unreadable directory in the --no-git walk

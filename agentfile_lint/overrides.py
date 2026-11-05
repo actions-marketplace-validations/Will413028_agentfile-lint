@@ -4,7 +4,7 @@ By default an override only lowers. An entry with `raise = true` only raises (fr
 file and one rule: when any lowering entry matches, the lowest of the rule level and those entries
 applies (lowering wins over raising); otherwise the highest of the rule level and the matching raising
 entries. Entry order never matters. Each glob of every entry from a config file (not a preset) must match
-an analyzed instruction file; a glob that matches none is a warning on the file that wrote it.
+an analyzed file (any family); a glob that matches none is a warning on the file that wrote it.
 """
 from __future__ import annotations
 
@@ -91,7 +91,7 @@ def level_for(path: str, rule: str, level: str, overrides: list[Override]) -> st
 
 
 def stale(overrides: list[Override], present: set[str], root: Path) -> list[Finding]:
-    """A warning for each override glob that matches no analyzed instruction file, on the file that wrote it.
+    """A warning for each override glob that matches no analyzed file, on the file that wrote it.
 
     Presets carry no overrides; an inherited glob a repository does not need is removed there with `unset`.
     """
@@ -105,7 +105,7 @@ def stale(overrides: list[Override], present: set[str], root: Path) -> list[Find
             if not any(discover.matches(p, [glob]) for p in present):
                 out.append(Finding(
                     _display(o.source, root), 0, RULE_ID,
-                    f"overrides[{o.index}]{origin}: glob {glob!r} matches no analyzed instruction file; {fix}",
+                    f"overrides[{o.index}]{origin}: glob {glob!r} matches no analyzed file; {fix}",
                     level="warn",
                 ))
     return out
