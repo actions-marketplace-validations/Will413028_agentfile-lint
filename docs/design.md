@@ -190,7 +190,8 @@ Each entry: `paths` (globs), `rules` (rule id or alias -> level), `reason`, opti
   matter. `E0`, `allowlist` and `disable` cannot be overridden.
 - An entry `{ unset = [globs], reason }` (no other keys) removes those globs from the overrides the
   file inherits through `extends`; an inherited entry left with no glob is dropped. A glob that is in no
-  inherited entry fails the configuration. It does not touch the file's own entries.
+  inherited entry fails the configuration. It does not touch the file's own entries. When one config
+  is inherited through two `extends` branches, a glob stays while any branch still inherits it.
 - It applies to the findings reported on the files it matches; those files stay in the input of
   cross-file rules (R1c still counts them, R5a and R5b still compare them), so a finding on a file
   outside the paths is still reported.

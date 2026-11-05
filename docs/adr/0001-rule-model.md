@@ -56,8 +56,10 @@ also had permanent exceptions (translated or example copies), so:
 
 ## Amendment (ADR 0006, 0.8.0)
 
-- Rejected inline comments: no longer rejected for single lines. Most false-positive reports are about
-  one line, and fixing those through the config means an allowlist entry that expires or an override
+- Rejected inline comments: no longer rejected for single lines. The trigger ADR 0004 set (a report of a
+  single-line false positive) had not happened; 0.8.0 adds the directive anyway so the configuration
+  surface is fixed before the tool is announced (ADR 0006). A false positive on one line fixed through
+  the config means an allowlist entry that expires or an override
   that silences a whole path. A per-line directive needs a reason, is reported when it suppresses
   nothing, and covers exactly one line, so it stays auditable (`rg agentfile-lint-disable`) without an
   expiry date. Whole-file exceptions still go in the config.

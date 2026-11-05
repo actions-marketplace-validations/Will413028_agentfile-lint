@@ -34,6 +34,10 @@ that is in no inherited entry fails the configuration instead of doing nothing.
 Consequences:
 
 - A raised rule runs even when its level is `off`; its findings outside the raised paths are dropped.
+- A wide lowering glob in a shared config (for example `**`) defeats every narrower raising entry on
+  the files it matches; the repository undoes it with `unset` and writes its own lowering entry.
+- A config reached twice through `extends` (a diamond) counts once, and its globs are the union of both
+  copies: an `unset` on one branch removes a glob only when no other branch still inherits it.
 - Inherited override globs are now checked for staleness too (a warning on the file that wrote them):
   with `unset` available, a repository can act on the warning.
 - `discover.extend_globs` and `[shared.duplicates] exclude` are added in the same release: the first

@@ -5,6 +5,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-05
+
 ### Changed (breaking)
 
 - Override globs inherited through `extends` that match no analyzed instruction file are now a warning

@@ -8,8 +8,10 @@ the releases from PyPI. Per-rule reasons and false-positive rates are in `docs/r
 `preset:strict`): every finding (file, line, rule, level) and every exit code is identical to 0.5.0.
 0.5.0 was rerun alongside it and reproduced the 2026-11-03 totals exactly. 0.7.0 was rerun on
 2026-11-05 the same way: every finding keeps its file, line and level and every exit code is the same
-as 0.6.0; only the rule ids changed, since 0.7.0 gives each check its own id (`docs/adr/0005`). The
-numbers below hold for 0.5.0 to 0.7.0 and use the 0.7.0 ids.
+as 0.6.0; only the rule ids changed, since 0.7.0 gives each check its own id (`docs/adr/0005`). 0.8.0
+was rerun the same way against 0.7.0: every finding and exit code is identical, including R1b (no
+sample file contains the line breaks 0.8.0 stopped counting). The numbers below hold for 0.5.0 to 0.8.0
+and use the 0.7.0 ids.
 
 ## Summary
 
@@ -43,8 +45,8 @@ All 22 repositories, no config:
 | | repos exit 1 | repos with findings | R1c error | R1b warn | R5a | R5b | R3b | R4a | R4b | R6 | C1 | total |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 0.4.0 | 12 | 19 | 339 (R1) | 0 | 278 (R5) | | 225 | 160 (R4) | | 40 | 54 | 1096 |
-| 0.5.0 to 0.7.0 | 6 | 11 | 16 | 20 | 67 | off | off | off | off | off | off | 103 |
-| 0.5.0 to 0.7.0 `preset:strict` | 6 | 19 | 16 | 20 | 87 | 87 | 222 | 108 | 51 | 40 | 50 | 681 |
+| 0.5.0 to 0.8.0 | 6 | 11 | 16 | 20 | 67 | off | off | off | off | off | off | 103 |
+| 0.5.0 to 0.8.0 `preset:strict` | 6 | 19 | 16 | 20 | 87 | 87 | 222 | 108 | 51 | 40 | 50 | 681 |
 
 0.4.0 had one id for each of R1, R4 and R5 and was not rerun per check: its counts for each group
 are in the first column of the group. In 0.4.0 every R1 check (bytes per file, lines, line length)

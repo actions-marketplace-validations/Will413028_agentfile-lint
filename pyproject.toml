@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentfile-lint"
-version = "0.7.0"
+version = "0.8.0"
 description = "A linter for agent instruction files (AGENTS.md / CLAUDE.md), configured by TOML."
 readme = "README.md"
 license = { text = "MIT" }
