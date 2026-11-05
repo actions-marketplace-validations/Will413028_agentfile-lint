@@ -4,11 +4,19 @@ from __future__ import annotations
 from pathlib import Path, PurePosixPath
 
 
+def normalize_newlines(raw: str) -> str:
+    """CRLF and lone CR become LF, as Python's text mode reads a file."""
+    return raw.replace("\r\n", "\n").replace("\r", "\n")
+
+
 class Context:
-    def __init__(self, root: Path, tracked: list[str], files: dict[str, str]):
+    def __init__(self, root: Path, tracked: list[str], raw: dict[str, str]):
         self.root = root
-        self.tracked = tracked          # every `git ls-files` entry
-        self.files = files              # analyzed instruction files (valid UTF-8): path -> text
+        self.tracked = tracked          # every `git ls-files` entry, or every walked file with `--no-git`
+        # Analyzed instruction files (valid UTF-8), read once by the engine: path -> text as stored on
+        # disk (`raw`, for byte, line and line-length limits) and with newlines normalized (`files`).
+        self.raw = raw
+        self.files = {path: normalize_newlines(text) for path, text in raw.items()}
         self.tracked_set = set(tracked)
         self.dirs = {""}                # every directory that holds a tracked file ("" is the root)
         for path in tracked:

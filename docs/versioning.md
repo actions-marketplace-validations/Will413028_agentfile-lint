@@ -31,7 +31,8 @@ the release that ships it (`Added`, `Changed`, `Fixed`, `Removed`).
   `### Graduated` heading, one bullet per rule starting with the rule id in backticks.
 - `tests/test_versioning.py` fails when a rule in any shipped preset (`agentfile_lint/presets/*.toml`)
   is above `warn` and not listed under `Graduated` (`off` is allowed: lowering needs no entry), and when `pyproject.toml`, `__version__` and the newest
-  changelog section disagree.
+  changelog section disagree. The pseudo rules `E0`, `allowlist` and `disable` are not in
+  any preset and have no level, so the warn-first policy does not apply to them.
 - Changing a default value changes every consumer that did not override it: say so under `Changed`.
 
 ## Branches and releasing

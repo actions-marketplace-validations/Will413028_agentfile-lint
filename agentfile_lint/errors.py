@@ -11,11 +11,17 @@ class ConfigError(Exception):
     """The configuration (or an allowlist entry) is invalid. The CLI exits with 2."""
 
 
-def check_keys(table: Any, allowed: Iterable[str], where: str) -> None:
-    """Fail on non-table values and on any key not in `allowed` (typos must not pass silently)."""
+def check_keys(table: Any, allowed: Iterable[str], where: str, removed: dict[str, str] | None = None) -> None:
+    """Fail on non-table values and on any key not in `allowed` (typos must not pass silently).
+
+    `removed` maps a key that an earlier release accepted to a message naming what replaces it.
+    """
     if not isinstance(table, dict):
         raise ConfigError(f"{where}: expected a table")
     allowed = set(allowed)
+    gone = sorted(set(table) & set(removed or {}))
+    if gone:
+        raise ConfigError(f"{where}.{gone[0]}: {removed[gone[0]]}")
     unknown = sorted(set(table) - allowed)
     if unknown:
         raise ConfigError(
@@ -36,9 +42,9 @@ def expect_str(value: Any, where: str) -> str:
     return value
 
 
-def expect_str_list(value: Any, where: str) -> list[str]:
-    if not isinstance(value, list) or not value:
-        raise ConfigError(f"{where}: expected a non-empty list of strings")
+def expect_str_list(value: Any, where: str, allow_empty: bool = False) -> list[str]:
+    if not isinstance(value, list) or not (value or allow_empty):
+        raise ConfigError(f"{where}: expected a {'' if allow_empty else 'non-empty '}list of strings")
     return [expect_str(v, f"{where}[{i}]") for i, v in enumerate(value)]
 
 

@@ -1,4 +1,5 @@
-"""File discovery: tracked instruction files only, always the full set (never just argv)."""
+"""File discovery: git-tracked files by default, or a file-system walk with `--no-git` (docs/adr/0006);
+always the full set (never just argv)."""
 from __future__ import annotations
 
 import functools
@@ -9,6 +10,12 @@ import subprocess
 from pathlib import Path
 
 LOCAL_SUFFIX = ".local.md"  # untracked local instruction files are never analyzed
+# Directories a `--no-git` walk never enters, at any depth: version-control data and dependency or
+# tool caches. A fixed list, not `.gitignore` (docs/adr/0006).
+SKIP_DIRS = frozenset({
+    ".git", ".hg", ".svn", "node_modules", ".venv", "venv", "__pycache__", ".tox", ".mypy_cache",
+    ".pytest_cache", ".ruff_cache", ".cache", ".direnv", ".gradle", ".next", ".terraform",
+})
 
 
 class DiscoverError(Exception):
@@ -67,9 +74,29 @@ def tracked_files(root: Path) -> list[str]:
     return sorted(p for p in out.split("\0") if p)
 
 
-def instruction_files(root: Path, globs: list[str]) -> list[str]:
-    """Tracked files matching `globs` that still exist in the working tree (staged deletions skipped)."""
-    return [p for p in tracked_files(root) if matches(p, globs) and (root / p).is_file()]
+def walked_files(root: Path) -> list[str]:
+    """Every file under `root` outside `SKIP_DIRS`, as sorted POSIX paths. Directory symlinks are not
+    followed (no loops, no files outside `root`); file symlinks are listed like tracked ones."""
+    def fail(exc: OSError) -> None:  # a partial set would make cross-file checks wrong, not just short
+        raise DiscoverError(f"cannot read {exc.filename}: {exc.strerror}") from exc
+
+    out: list[str] = []
+    for dirpath, dirnames, filenames in os.walk(root, onerror=fail):
+        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+        rel = Path(dirpath).relative_to(root)
+        out.extend((rel / name).as_posix() for name in filenames)
+    return sorted(out)
+
+
+def list_files(root: Path, use_git: bool = True) -> list[str]:
+    """The file set rules see: `git ls-files`, or the walk for `--no-git`."""
+    return tracked_files(root) if use_git else walked_files(root)
+
+
+def instruction_files(root: Path, globs: list[str], files: list[str]) -> list[str]:
+    """Files from `files` (`list_files`) matching `globs` that exist in the working tree (staged
+    deletions skipped)."""
+    return [p for p in files if matches(p, globs) and (root / p).is_file()]
 
 
 def aliases(root: Path, paths: list[str]) -> dict[str, str]:

@@ -25,24 +25,24 @@ def on(path, lines):
 class SymlinkAliasTest(unittest.TestCase):
     def test_claude_md_symlink_to_agents_md_is_not_checked_again(self):
         _, lines = lint({"AGENTS.md": LONG}, {"CLAUDE.md": "AGENTS.md"}, '[rules.C1]\nlevel = "error"\n')
-        self.assertEqual(on("CLAUDE.md", lines), [])                       # no R1, R5 or C1 on the alias
-        self.assertEqual(len([x for x in on("AGENTS.md", lines) if ": R1: " in x]), 1)  # target still checked once (its line count)
+        self.assertEqual(on("CLAUDE.md", lines), [])                       # no R1b, R5a or C1 on the alias
+        self.assertEqual(len([x for x in on("AGENTS.md", lines) if ": R1b: " in x]), 1)  # target still checked once (its line count)
 
     def test_nested_symlink_to_an_ancestor_file_is_checked_as_its_own_file(self):
         # An agent working in sub/ loads both files, so the repeated lines are real duplicates.
         _, lines = lint({"AGENTS.md": LONG}, {"sub/AGENTS.md": "../AGENTS.md"})
-        self.assertTrue([x for x in on("sub/AGENTS.md", lines) if ": R5: line repeats AGENTS.md:" in x])
+        self.assertTrue([x for x in on("sub/AGENTS.md", lines) if ": R5a: line repeats AGENTS.md:" in x])
 
     def test_symlinks_in_other_directories_are_separate_load_locations(self):
         files = {"docs/shared.md": LONG}
         _, lines = lint(files, {"z/AGENTS.md": "../docs/shared.md", "a/b/AGENTS.md": "../../docs/shared.md"})
-        self.assertTrue([x for x in on("z/AGENTS.md", lines) if ": R1: " in x])
-        self.assertTrue([x for x in on("a/b/AGENTS.md", lines) if ": R1: " in x])
+        self.assertTrue([x for x in on("z/AGENTS.md", lines) if ": R1b: " in x])
+        self.assertTrue([x for x in on("a/b/AGENTS.md", lines) if ": R1b: " in x])
 
     def test_two_symlinks_in_one_directory_to_an_ancestor_file_are_checked_once(self):
         _, lines = lint({"AGENTS.md": LONG}, {"sub/AGENTS.md": "../AGENTS.md", "sub/CLAUDE.md": "../AGENTS.md"}, '[rules.C1]\nlevel = "error"\n')
         self.assertEqual(on("sub/CLAUDE.md", lines), [])  # alias of sub/AGENTS.md; C1 accepts it
-        self.assertTrue([x for x in on("sub/AGENTS.md", lines) if ": R5: line repeats AGENTS.md:" in x])
+        self.assertTrue([x for x in on("sub/AGENTS.md", lines) if ": R5a: line repeats AGENTS.md:" in x])
 
     def test_c1_accepts_the_symlink_when_globs_leave_out_claude_md(self):
         cfg = '[discover]\nglobs = ["AGENTS.md", "**/AGENTS.md"]\n[rules.C1]\nlevel = "error"\n'
@@ -64,7 +64,7 @@ class SymlinkAliasTest(unittest.TestCase):
         outside = tmp / "shared.md"
         outside.write_text(LONG, encoding="utf-8")
         _, lines = lint({}, {"AGENTS.md": str(outside)})
-        self.assertEqual(len([x for x in on("AGENTS.md", lines) if ": R1: " in x]), 1)
+        self.assertEqual(len([x for x in on("AGENTS.md", lines) if ": R1b: " in x]), 1)
 
     def test_dangling_symlink_is_skipped(self):
         rc, lines = lint({"AGENTS.md": "ok\n"}, {"CLAUDE.md": "missing.md"})
@@ -82,7 +82,7 @@ class SymlinkAliasTest(unittest.TestCase):
         self.assertEqual((rc, on("CLAUDE.md", lines)), (0, []))
 
     def test_allowlist_entry_for_an_alias_is_no_longer_needed(self):
-        entry = '[[allowlist.entries]]\nrule = "R1"\npath = "CLAUDE.md"\nreason = "split later"\nexpires = 2026-06-30\n'
+        entry = '[[allowlist.entries]]\nrule = "R1b"\npath = "CLAUDE.md"\ncount = 1\nreason = "split later"\nexpires = 2026-06-30\n'
         rc, lines = lint({"AGENTS.md": LONG}, {"CLAUDE.md": "AGENTS.md"}, entry)
         self.assertEqual(rc, 1)
         self.assertIn("is no longer needed (file is not an analyzed instruction file)", "\n".join(on("CLAUDE.md", lines)))

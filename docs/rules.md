@@ -4,24 +4,35 @@ For each rule: why a finding is a problem, where its default comes from, whether
 only with `preset:strict`, and how often it was wrong when measured. Every key is documented in
 `agentfile_lint/presets/default.toml`; `agentfile-lint --list-rules` prints the effective levels.
 
-Every rule in the table except `allowlist` has an id and an alias (the name after the level in
-`--list-rules`); `allowlist` and `E0` have only their id. The alias works wherever the id does: `[rules.size]`
-is `[rules.R1]`, an allowlist entry may say `rule = "size"`, and an override may say `rules = { size = "warn" }`. Each config file is resolved on its
-own before merging, so a repo's `[rules.size]` overrides a preset's `[rules.R1]`; one file that names a
-rule both ways fails (exit 2). Findings and error messages always print the id.
+Every rule in the table except `allowlist` and `disable` has an id and an alias (the name after the level in
+`--list-rules`); `allowlist`, `disable` and `E0` have only their id. The alias works wherever the id does:
+`[rules.file-lines]` is `[rules.R1b]`, an allowlist entry may say `rule = "file-lines"`, and an override
+may say `rules = { file-lines = "warn" }`. Each config file is resolved on its own before merging, so a
+repo's `[rules.file-lines]` overrides a preset's `[rules.R1b]`; one file that names a rule both ways
+fails (exit 2). Findings and error messages always print the id.
+
+Each id is one check with one level (docs/adr/0005). The ids R1, R4 and R5 of 0.6.0 and their aliases
+`size`, `rot` and `duplicates` were split in 0.7.0 and fail the configuration with a message naming the
+new ids.
 
 | Rule | Alias | Checks | Kind | Default | `preset:strict` |
 |---|---|---|---|---|---|
-| [R1](#r1-size) | `size` | size of a file and of the files on its path | objective | error (32 KiB on a path), warn (200 lines) | same |
+| [R1a](#r1a-to-r1d-size) | `file-bytes` | bytes per file | objective | error, no limit set | same |
+| [R1b](#r1a-to-r1d-size) | `file-lines` | lines per file | objective | warn (200 lines) | same |
+| [R1c](#r1a-to-r1d-size) | `path-bytes` | combined bytes of the files on a path | objective | error (32 KiB) | same |
+| [R1d](#r1a-to-r1d-size) | `line-length` | characters per line | objective | off | off |
 | [R2](#r2-shape) | `shape` | required headings and file shape | objective, needs config | warn | warn |
 | [R3a](#r3a-test-names) | `test-names` | a backticked test name is defined | objective | warn | warn |
 | [R3b](#r3b-path-references) | `path-refs` | a backticked path exists | heuristic | off | warn |
 | [R3c](#r3c-spec-references) | `spec-refs` | a `§N` reference matches a spec heading | objective, needs config | warn | warn |
-| [R4](#r4-rot) | `rot` | dates, issue numbers, narrative words | heuristic | off | warn |
-| [R5](#r5-duplicates) | `duplicates` | identical lines in files an agent loads together | objective match, heuristic intent | warn (same-name ancestor pairs) | warn (any pair, siblings) |
+| [R4a](#r4a-and-r4b-rot) | `dated-refs` | dates and issue numbers | heuristic | off | warn |
+| [R4b](#r4a-and-r4b-rot) | `narrative-words` | narrative words | heuristic | off | warn |
+| [R5a](#r5a-and-r5b-duplicates) | `ancestor-duplicates` | lines a file repeats from an ancestor file | objective match, heuristic intent | warn (same-name pairs) | warn (any pair) |
+| [R5b](#r5a-and-r5b-duplicates) | `sibling-duplicates` | lines repeated in other files | heuristic | off | warn |
 | [R6](#r6-copied-constants) | `constants` | values copied from code | heuristic | off | warn |
 | [C1](#c1-claudemd) | `claude-md` | `CLAUDE.md` only imports `AGENTS.md` | convention | off | warn |
 | [allowlist](#allowlist) | — | exceptions are current and still needed | objective | error | error |
+| [disable](#disable) | — | per-line directives are well formed and still needed | objective | error | error |
 
 ## How the rates were measured
 
@@ -42,7 +53,7 @@ at most 30% (docs/adr/0003). The rates below come from that measurement (2026-11
   0.5.0 only stops counting a same-directory symlink as a second file, which removed findings that were
   all false positives.
 
-## R1 size
+## R1a to R1d size
 
 Why: agents read these files every session, and some stop reading past a limit. Codex reads `AGENTS.md` from the repository root
 down to the working directory and stops adding files once their combined size reaches
@@ -55,30 +66,27 @@ on demand (a subdirectory `CLAUDE.md`, `CLAUDE.local.md`, path-scoped rules) to 
 characters with a 200K context (more with a 1M context), adds a note telling it to read the rest, and
 warns at startup about large files.
 
-Default: `AGENTS.md` files on one path that total over 32768 bytes are an error (`path_limits`, reported
-on the file where the total first exceeds the limit); `AGENTS.md` and `CLAUDE.md` over 200 lines are a
-warning. Both are limits an agent's documentation states; the first one drops text, the second is
-guidance. Per-line character limits and other byte limits are yours to add (`limits`,
-`max_line_chars`).
+Default: `AGENTS.md` files on one path that total over 32768 bytes are an error (R1c, reported on the
+file where the total first exceeds the limit); `AGENTS.md` and `CLAUDE.md` over 200 lines are a warning
+(R1b). Both are limits an agent's documentation states; the first one drops text, the second is
+guidance. Per-file byte limits (R1a `limits`) and a per-line character limit (R1d `max_chars`) are yours
+to add. Each id has its own level, so an allowlist entry for the 200-line warning does not hide the
+32 KiB error on the same file. Lines are counted, and every rule's line numbers given, by LF, CRLF and a lone
+CR only, as `grep -n` counts them; form feed and U+2028 do not end a line.
 
 Blind spot: the default counts no characters. A `CLAUDE.md` under 200 lines with long or non-ASCII
 lines passes even when Claude Code would cut it, and the 32 KiB path limit covers only `AGENTS.md`. To
 approximate Claude Code's limit, add a byte limit; bytes are never fewer than characters, so it misses
 no file over 40,000 characters, but it reports text in a three-byte script (Chinese, Japanese) from
-about 13,300 characters. A `limits` list replaces the default one, so repeat its entries:
+about 13,300 characters. R1a has no default limits, so the list is only yours:
 
 ```toml
-[[rules.R1.limits]]
-glob = "**/AGENTS.md"
-max_lines = 200
-lines_level = "warn"
+[rules.R1a]
+level = "warn"
 
-[[rules.R1.limits]]
+[[rules.R1a.limits]]
 glob = "**/CLAUDE.md"
-max_lines = 200
-lines_level = "warn"
 max_bytes = 40000
-bytes_level = "warn"
 ```
 
 Measured: objective, so no false-positive rate. With no config, 22 public repositories gave 16 errors
@@ -125,37 +133,39 @@ their spec document.
 
 Measured: not measured; nothing to check with no config.
 
-## R4 rot
+## R4a and R4b rot
 
 Why: dates, issue numbers and words like "currently" or "recently" describe history. The file should
 state the rule that holds now; history belongs in the changelog or the commit, where it cannot go stale
 in front of an agent.
 
-Default: off. Dates and issue numbers are also used as citations, and narrative words have ordinary
-meanings ("used to produce").
+Default: off. Dates and issue numbers (R4a) are also used as citations, and narrative words (R4b) have
+ordinary meanings ("used to produce"). `preset:strict` turns both on at `warn`.
 
 Measured (tuning sample, 0.4.0): 16 of 19 false positives, 84% (Wilson 95%: 62.4% to 94.5%); 1
 undecidable. Most false positives were issue numbers cited as the source of a rule ("(#1234)"); the true
 problems described change history ("PR #1234 moved ...").
 
-## R5 duplicates
+## R5a and R5b duplicates
 
 Why: an agent that loads a file and its ancestor reads a duplicated line twice, and the two copies drift
 apart (one gets edited, the other does not).
 
-Default: on at `warn`, only for a file and a same-name file in an ancestor directory (`AGENTS.md` and
-`sub/AGENTS.md`), the pair one agent loads together (`ancestor_pairs = "same-name"`). Lines must be at
-least 40 characters and identical after collapsing whitespace and dropping list markers; headings are
-skipped. `preset:strict` also compares different names and files in one directory (`ancestor_pairs =
-"any"`) and sibling files (`sibling_level = "warn"`).
+Default: R5a on at `warn`, only for a file and a same-name file in an ancestor directory (`AGENTS.md`
+and `sub/AGENTS.md`), the pair one agent loads together (`[shared.duplicates] ancestor_pairs =
+"same-name"`). Lines must be at least 40 characters and identical after collapsing whitespace and
+dropping list markers; headings are skipped. `preset:strict` also compares different names and files in
+one directory (`ancestor_pairs = "any"`) and turns on R5b, sibling files, at `warn`.
 
 Measured, default pairs (held-out sample): 0 of 13 false positives (Wilson 95%: 0% to 22.8%), from two
 repositories; one false positive would have failed the 30% bar. Known false-positive class: in the
 tuning sample, all 54 same-name findings came from one repository and were deliberate copies
-(translations under `docs/<language>/`, `examples/`). Such a repository turns R5 off for those paths with
-`[[overrides]]` (`paths = ["docs/**", "examples/**"]`, `rules = { duplicates = "off" }`). An override
-silences the findings on the files it matches: with `preset:strict`, the sibling comparison still reports
-the original outside those paths, since its finding is on that file.
+(translations under `docs/<language>/`, `examples/`). Such a repository turns R5a and R5b off for those
+paths with `[[overrides]]` (`paths = ["docs/**", "examples/**"]`, `rules = { R5a = "off", R5b = "off" }`).
+An override silences the findings on the files it matches: with `preset:strict`, R5b still reports the
+original outside those paths, since its finding is on that file. To leave copies out of the comparison
+altogether, list them in `[shared.duplicates] exclude` (globs, default none): an excluded file is
+neither reported nor used as the ancestor text, so the original is not reported either.
 
 Measured, strict pairs (tuning sample, 0.4.0): 20 of 20 false positives. 11 of them were a file compared
 with its own symlink, fixed in 0.5.0; the other 9 were translations, templates and examples, 9 of 9
@@ -189,12 +199,25 @@ did not recognize as the import. 0.5.0 with `preset:strict` reports 26 of them.
 Why: a debt exception without an end date becomes permanent without anyone deciding so. Every allowlist
 entry has a reason and an expiry date at most `max_days` (90) ahead; an expired entry, or one that no
 longer suppresses anything, fails. A path that is meant to differ for good goes in `[[overrides]]`
-instead, with a required reason; each glob of an override in the config file the run loads (not one
-reached through `extends`) that matches no analyzed instruction file is a warning, so a stale override
-shows up without failing CI unless `--warn-as-error` is given.
+instead, with a required reason; each glob of an override that matches no analyzed instruction file is
+a warning on the config file that wrote it (an inherited one is removed with `unset`), so a stale
+override shows up without failing CI unless `--warn-as-error` is given.
 
 Default: on, from your config only; with no entries it reports nothing. Entries warn `warn_days` (14)
 before they expire, so run CI on a weekly schedule.
+
+Measured: objective, so no false-positive rate.
+
+## disable
+
+Why: a false positive on one line should be fixable next to that line, but an exception without a
+reason or one that no longer applies is as bad as an allowlist entry without them.
+`<!-- agentfile-lint-disable-next-line R5a -- reason -->` on a line of its own drops the named rules'
+findings on the next line (docs/design.md, Per-line directives). A malformed directive (no id, no
+reason, an unknown id or a whole-file rule: `R1a`, `R1b`, `R1c`, `C1`) is an error; a named rule with no
+finding on the next line is a warning.
+
+Default: on; with no directives it reports nothing. No level or override changes it.
 
 Measured: objective, so no false-positive rate.
 

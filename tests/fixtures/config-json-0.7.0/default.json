@@ -1,0 +1,214 @@
+{
+  "allowlist": {
+    "entries": [],
+    "max_days": 90,
+    "max_entries": 10,
+    "warn_days": 14
+  },
+  "check_pins": {
+    "files": [
+      ".pre-commit-config.yaml",
+      ".pre-commit-config.yml",
+      "lefthook.yml",
+      "lefthook.yaml",
+      ".lefthook.yml",
+      ".lefthook.yaml",
+      ".github/workflows/*.yml",
+      ".github/workflows/*.yaml"
+    ],
+    "repo": "agentfile-lint"
+  },
+  "discover": {
+    "globs": [
+      "AGENTS.md",
+      "**/AGENTS.md",
+      "CLAUDE.md",
+      "**/CLAUDE.md"
+    ]
+  },
+  "overrides": [],
+  "rules": {
+    "C1": {
+      "import_line": "@AGENTS.md",
+      "level": "off",
+      "mode": "import-only"
+    },
+    "R1a": {
+      "level": "error",
+      "limits": []
+    },
+    "R1b": {
+      "level": "warn",
+      "limits": [
+        {
+          "glob": "**/AGENTS.md",
+          "max_lines": 200
+        },
+        {
+          "glob": "**/CLAUDE.md",
+          "max_lines": 200
+        }
+      ]
+    },
+    "R1c": {
+      "level": "error",
+      "limits": [
+        {
+          "glob": "**/AGENTS.md",
+          "max_bytes": 32768
+        }
+      ]
+    },
+    "R1d": {
+      "level": "off"
+    },
+    "R2": {
+      "level": "warn",
+      "shapes": []
+    },
+    "R3a": {
+      "level": "warn",
+      "test_defs": [
+        {
+          "definition": "func (?:\\([^)]*\\)\\s*)?{name}\\(",
+          "files": [
+            "**/*_test.go"
+          ],
+          "name": "Test[A-Z0-9_][A-Za-z0-9_]*"
+        },
+        {
+          "definition": "def {name}\\(",
+          "files": [
+            "**/test_*.py",
+            "**/*_test.py"
+          ],
+          "name": "test_[A-Za-z0-9_]+"
+        }
+      ]
+    },
+    "R3b": {
+      "base_dirs": [],
+      "check_bare_names": false,
+      "file_extensions": [
+        "md",
+        "go",
+        "py",
+        "ts",
+        "tsx",
+        "js",
+        "jsx",
+        "json",
+        "toml",
+        "yaml",
+        "yml",
+        "sql",
+        "sh",
+        "dart",
+        "proto",
+        "css",
+        "html",
+        "txt"
+      ],
+      "ignore_negated_words": [],
+      "ignore_patterns": [
+        "(^|/)node_modules(/|$)",
+        "(^|/)\\.env(\\.|$)",
+        "^\\.git(/|$)",
+        "(^|/)\\.(next|vercel|venv|cache)(/|$)",
+        "\\.gitkeep$"
+      ],
+      "level": "off",
+      "resolve_extensions": [],
+      "source_roots": []
+    },
+    "R3c": {
+      "heading_pattern": "^#{1,6}[ \\t]+(?:§[ \\t]*)?(\\d+(?:\\.\\d+)*)(?![0-9])",
+      "ignore_before": [],
+      "ignore_qualified": true,
+      "level": "warn",
+      "plain_words": [
+        "see",
+        "spec",
+        "specification",
+        "section",
+        "sections",
+        "in",
+        "per",
+        "and",
+        "or",
+        "to",
+        "at",
+        "of",
+        "the",
+        "also",
+        "cf",
+        "ref"
+      ],
+      "ref_pattern": "§\\s*(\\d+(?:\\.\\d+)*)",
+      "specs": []
+    },
+    "R4a": {
+      "date_patterns": [
+        "(?<![0-9])(?:19|20)\\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])(?![0-9])"
+      ],
+      "ignore_token_patterns": [
+        "/",
+        "\\.(?:md|txt|sql|go|ts|tsx|js|py|toml|ya?ml|json)\\b",
+        "(?:19|20)[0-9]{2}-[0-9]{2}-[0-9]{2}-[A-Za-z]"
+      ],
+      "issue_patterns": [
+        "(?<![A-Za-z0-9_&#/])#\\d+(?![A-Za-z0-9_])",
+        "(?i:(?<![A-Za-z])(?:issue|pull request|PR)\\s+#?\\d+)(?![0-9])"
+      ],
+      "level": "off"
+    },
+    "R4b": {
+      "level": "off",
+      "narrative_words": [
+        "currently",
+        "recently",
+        "previously",
+        "formerly",
+        "no longer",
+        "used to",
+        "for now",
+        "at the moment",
+        "temporarily",
+        "newly",
+        "目前",
+        "最近",
+        "近期",
+        "暫時",
+        "以前",
+        "原本",
+        "已改為",
+        "已移除"
+      ]
+    },
+    "R5a": {
+      "level": "warn"
+    },
+    "R5b": {
+      "level": "off"
+    },
+    "R6": {
+      "candidate_patterns": [
+        "`[A-Za-z_][A-Za-z0-9_.]*\\s*(?::=|=|:)\\s*-?\\d[0-9_.,]*[A-Za-z%]*`",
+        "\\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\\b[ \\t`=:]{1,6}[0-9]+",
+        "(?<![A-Za-z0-9])\\d[0-9,_]*\\s?(?:ms|seconds?|minutes?|hours?|days?|bytes|KB|MB|GB|秒|分鐘|小時|天|字元)(?![A-Za-z])"
+      ],
+      "level": "off"
+    }
+  },
+  "shared": {
+    "duplicates": {
+      "ancestor_pairs": "same-name",
+      "ignore_headings": true,
+      "ignore_patterns": [],
+      "min_chars": 40
+    },
+    "size": {
+      "excluded_blocks": []
+    }
+  }
+}

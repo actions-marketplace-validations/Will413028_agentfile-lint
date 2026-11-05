@@ -29,6 +29,7 @@ from . import config as config_mod
 from . import discover
 from .errors import ConfigError
 from .finding import Finding
+from .rules._text import split_lines
 
 SHA = re.compile(r"[0-9a-f]{40}")
 _REPO_LINE = re.compile(r"^\s*(?:-\s+)?repo:\s*(\S+)")
@@ -45,7 +46,7 @@ class Ref:
 
 def scan(path: str, text: str, repo: str) -> list[Ref]:
     refs: list[Ref] = []
-    lines = text.splitlines()
+    lines = split_lines(text)
     at_ref = re.compile(re.escape(repo) + r"[^\s'\"@]*@(?P<ref>[^\s'\"#]+)")
     in_entry = False
     entry_line = 0

@@ -3,8 +3,8 @@ import unittest
 import helpers
 
 TOML = (
-    '[rules.R1]\nmax_line_chars = 500\n'
-    '[[allowlist.entries]]\nrule = "R1"\npath = "AGENTS.md"\nreason = "temporary"\nexpires = 2026-03-10\n'
+    '[rules.R1d]\nlevel = "error"\nmax_chars = 500\n'
+    '[[allowlist.entries]]\nrule = "R1d"\npath = "AGENTS.md"\ncount = 1\nreason = "temporary"\nexpires = 2026-03-10\n'
 )
 
 
@@ -26,10 +26,10 @@ class DateInjectionTest(unittest.TestCase):
         self.assertEqual(self.run_at("2026-01-15")[0:2], (0, ""))               # 54 days: silent
         code, out, _ = self.run_at("2026-03-01")                               # 9 days: warn
         self.assertEqual(code, 0)
-        self.assertIn("AGENTS.md: warning: allowlist: entry for R1 expires in 9 days", out)
+        self.assertIn("AGENTS.md: warning: allowlist: entry for R1d expires in 9 days", out)
         code, out, _ = self.run_at("2026-03-11")                               # expired
         self.assertEqual(code, 1)
-        self.assertIn("AGENTS.md: error: allowlist: entry for R1 expired on 2026-03-10", out)
+        self.assertIn("AGENTS.md: error: allowlist: entry for R1d expired on 2026-03-10", out)
 
 
 if __name__ == "__main__":

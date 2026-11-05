@@ -5,22 +5,27 @@ extends = ["preset:default"]
 [discover]
 globs = ["AGENTS.md", "**/AGENTS.md"]   # the legacy checker only looked at AGENTS.md
 
-[rules.R1]
-level = "error"
-max_line_chars = 500
+[shared.size]
 excluded_blocks = [
   { begin = "<!-- BEGIN:nextjs-agent-rules -->", end = "<!-- END:nextjs-agent-rules -->" },
 ]
 
+[rules.R1b]
+limits = []               # the legacy checker had no line limit
+
+[rules.R1d]
+level = "error"
+max_chars = 500
+
 # Depth tiers as globs: `*` never crosses `/`, so `*/AGENTS.md` is exactly depth 1; first match wins.
-[[rules.R1.limits]]
+[[rules.R1a.limits]]
 glob = "AGENTS.md"        # depth 0
 max_bytes = 12000
 
-[[rules.R1.limits]]
+[[rules.R1a.limits]]
 glob = "*/AGENTS.md"      # depth 1
 max_bytes = 10000
 
-[[rules.R1.limits]]
+[[rules.R1a.limits]]
 glob = "**/AGENTS.md"     # depth 2 and deeper
 max_bytes = 6000

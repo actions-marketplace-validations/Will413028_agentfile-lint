@@ -17,9 +17,16 @@ from ._text import code_spans, prose_lines
 ID = "R3a"
 NAME = "test-names"
 DESCRIPTION = "test names referenced in backticks exist in the repository"
+CHECKS = ((ID, NAME, DESCRIPTION),)
 
 
-def validate(params: dict[str, Any]) -> dict[str, Any]:
+def validate(shared: None, tables: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    params = _params(tables)
+    return params, {ID: params}
+
+
+def _params(tables: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    params = tables[ID]
     where = f"rules.{ID}"
     check_keys(params, {"level", "test_defs"}, where)
     require_keys(params, ["test_defs"], where)
@@ -54,7 +61,7 @@ def _defined(ctx: Context, spec: dict[str, Any]) -> set[str] | None:
     return names
 
 
-def check_repo(ctx: Context, params: dict[str, Any]) -> list[Finding]:
+def check_repo(ctx: Context, params: dict[str, Any], levels: dict[str, str]) -> list[Finding]:
     specs = []
     for spec in params["test_defs"]:
         names = _defined(ctx, spec)

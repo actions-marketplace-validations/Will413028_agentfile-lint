@@ -16,16 +16,23 @@ from ._text import prose_lines
 ID = "R6"
 NAME = "constants"
 DESCRIPTION = "candidate constants copied from code into prose (always a warning)"
+CHECKS = ((ID, NAME, DESCRIPTION),)
 
 
-def validate(params: dict[str, Any]) -> dict[str, Any]:
+def validate(shared: None, tables: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    params = _params(tables)
+    return params, {ID: params}
+
+
+def _params(tables: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    params = tables[ID]
     where = f"rules.{ID}"
     check_keys(params, {"level", "candidate_patterns"}, where)
     require_keys(params, ["candidate_patterns"], where)
     return {"level": params["level"], "candidate_patterns": expect_regex_list(params["candidate_patterns"], f"{where}.candidate_patterns")}
 
 
-def check(path: str, text: str, params: dict[str, Any]) -> list[Finding]:
+def check(path: str, text: str, params: dict[str, Any], levels: dict[str, str]) -> list[Finding]:
     patterns = [re.compile(p) for p in params["candidate_patterns"]]
     found: list[Finding] = []
     for number, line in prose_lines(text):

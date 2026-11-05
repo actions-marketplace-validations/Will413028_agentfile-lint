@@ -1,7 +1,9 @@
-"""Allowlist: time-boxed exceptions. Every entry needs rule, path, reason and expires.
+"""Allowlist: time-boxed, counted exceptions. Every entry needs rule, path, count, reason, expires.
 
-An entry that has expired fails, and so does an entry that is no longer needed (the file no
-longer violates the rule, or the file is gone): exceptions can only shrink.
+An entry suppresses the findings of its rule in its file only while their number n equals or is
+below `count` (docs/adr/0005). n > count suppresses nothing and fails, so a new violation is never
+hidden under an old exception; n < count fails asking to lower the count; n = 0 fails as no longer
+needed; an expired entry fails and suppresses nothing. Exceptions can only shrink.
 """
 from __future__ import annotations
 
@@ -9,7 +11,7 @@ import datetime
 from dataclasses import dataclass
 from typing import Any
 
-from .errors import ConfigError, check_keys, expect_str
+from .errors import ConfigError, check_keys, expect_int, expect_str
 from .finding import Finding
 
 RULE_ID = "allowlist"
@@ -26,6 +28,7 @@ class Settings:
 class Entry:
     rule: str
     path: str
+    count: int
     reason: str
     expires: datetime.date
 
@@ -43,14 +46,15 @@ def parse(raw: Any, settings: Settings, known_rules: set[str], today: datetime.d
     seen: set[tuple[str, str]] = set()
     for i, item in enumerate(raw):
         where = f"allowlist.entries[{i}]"
-        check_keys(item, {"rule", "path", "reason", "expires"}, where)
-        for key in ("rule", "path", "reason", "expires"):
+        check_keys(item, {"rule", "path", "count", "reason", "expires"}, where)
+        for key in ("rule", "path", "count", "reason", "expires"):
             if key not in item:
                 raise ConfigError(f"{where}: missing key {key}")
         rule = expect_str(item["rule"], f"{where}.rule")
         if rule not in known_rules:
             raise ConfigError(f"{where}.rule: unknown rule {rule!r}")
         path = expect_str(item["path"], f"{where}.path")
+        count = expect_int(item["count"], f"{where}.count", 1)
         reason = expect_str(item["reason"], f"{where}.reason")
         expires = item["expires"]
         # TOML dates arrive as datetime.date; a quoted string is accepted too.
@@ -69,8 +73,12 @@ def parse(raw: Any, settings: Settings, known_rules: set[str], today: datetime.d
         if (rule, path) in seen:
             raise ConfigError(f"{where}: duplicate entry for {rule} {path}")
         seen.add((rule, path))
-        entries.append(Entry(rule, path, reason, expires))
+        entries.append(Entry(rule, path, count, reason, expires))
     return entries
+
+
+def _findings(n: int) -> str:
+    return f"{n} finding" if n == 1 else f"{n} findings"
 
 
 def apply(
@@ -84,21 +92,40 @@ def apply(
 
     `present` is the full set of analyzed paths (decision: always the full set, never argv).
     """
-    live = {(e.rule, e.path) for e in entries if e.expires >= today}
-    violating = {(f.rule, f.path) for f in findings}
-    out = [f for f in findings if (f.rule, f.path) not in live]
+    found: dict[tuple[str, str], int] = {}
+    for f in findings:
+        found[(f.rule, f.path)] = found.get((f.rule, f.path), 0) + 1
+    covered: set[tuple[str, str]] = set()
+    notes: list[Finding] = []
     for e in entries:
         days = (e.expires - today).days
+        n = found.get((e.rule, e.path), 0)
         if days < 0:
-            out.append(Finding(
+            notes.append(Finding(
                 e.path, 0, RULE_ID,
                 f"entry for {e.rule} expired on {e.expires} ({-days} days ago); fix the file or renew with a new reason",
             ))
-        elif (e.rule, e.path) not in violating:
+            continue
+        if n == 0:
             why = "file is not an analyzed instruction file" if e.path not in present else f"file no longer violates {e.rule}"
-            out.append(Finding(e.path, 0, RULE_ID, f"entry for {e.rule} is no longer needed ({why}); remove it"))
-        elif days <= settings.warn_days:
-            out.append(Finding(
+            notes.append(Finding(e.path, 0, RULE_ID, f"entry for {e.rule} is no longer needed ({why}); remove it"))
+            continue
+        if n > e.count:
+            # The new findings cannot be told apart from the accepted ones, so all are reported.
+            notes.append(Finding(
+                e.path, 0, RULE_ID,
+                f"entry for {e.rule} has count {e.count} but the file has {_findings(n)}; none is suppressed, "
+                f"fix the file down to {e.count} or fewer",
+            ))
+        else:
+            covered.add((e.rule, e.path))
+            if n < e.count:
+                notes.append(Finding(
+                    e.path, 0, RULE_ID,
+                    f"entry for {e.rule} has count {e.count} but the file has {_findings(n)}; lower count to {n}",
+                ))
+        if days <= settings.warn_days:
+            notes.append(Finding(
                 e.path, 0, RULE_ID, f"entry for {e.rule} expires in {days} days ({e.expires})", level="warn",
             ))
-    return out
+    return [f for f in findings if (f.rule, f.path) not in covered] + notes

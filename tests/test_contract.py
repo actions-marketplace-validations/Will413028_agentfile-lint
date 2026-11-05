@@ -1,4 +1,4 @@
-"""Contract: the new R1 against the legacy checker snapshot, with a list of deliberate differences.
+"""Contract: R1a to R1d against the legacy checker snapshot, with a list of deliberate differences.
 
 Both tools run on the same synthetic git repos. Their outputs are normalised to sets of
 (path, line or 0, kind size|line, measured, limit) and compared, together with exit codes.
@@ -53,16 +53,16 @@ def normalise_legacy(stderr: str) -> set[tuple]:
 
 
 def normalise_new(stdout: str) -> set[tuple]:
-    """R1 errors only: the legacy checker had no other rule, and the shared stdout also carries the
-    R5 warnings the tier files trigger (the legacy comparison read errors from stderr before 0.6.0)."""
+    """R1a to R1d errors only: the legacy checker had no other rule, and the shared stdout also carries
+    the R5a warnings the tier files trigger (the legacy comparison read errors from stderr before 0.6.0)."""
     out = set()
     for raw in stdout.splitlines():
         m = NEW_LINE.match(raw)
         assert m, f"unparsable new line: {raw!r}"
         path, line, severity, rule, msg = m.group(1), int(m.group(2) or 0), m.group(3), m.group(4), m.group(5)
-        if rule != "R1":
+        if rule not in ("R1a", "R1b", "R1c", "R1d"):
             continue
-        assert severity == "error", f"R1 is at error in the fixture: {raw!r}"
+        assert severity == "error", f"R1a to R1d are at error in the fixture: {raw!r}"
         if s := NEW_SIZE.match(msg):
             out.add((path, line, "size", int(s.group(1)), int(s.group(2))))
         elif s := NEW_LONG.match(msg):

@@ -3,7 +3,7 @@ import unittest
 
 import helpers
 
-# One file set that trips R3b, R4 (date and narrative word), R5 between siblings, R6 and C1.
+# One file set that trips R3b, R4a (a date), R4b (a narrative word), R5b (siblings), R6 and C1.
 LINE = "Keep every generated client in sync with the schema before you open a pull request.\n"
 FILES = {
     "AGENTS.md": "See `gone/file.go` for details.\nShipped on 2026-01-02, currently behind a flag.\n"
@@ -12,7 +12,7 @@ FILES = {
     "a/AGENTS.md": LINE,
     "b/AGENTS.md": LINE,
 }
-HEURISTIC = ("R3b", "R4", "R5", "R6", "C1")
+HEURISTIC = ("R3b", "R4a", "R4b", "R5b", "R6", "C1")
 
 
 def rules_hit(config=None):
@@ -38,12 +38,12 @@ class PresetsTest(unittest.TestCase):
         root = helpers.make_repo({"AGENTS.md": "x" * 99 + "\n" * 1 + ("y" * 99 + "\n") * 330,
                                   ".agentfile-lint.toml": 'extends = ["preset:strict"]\n'})
         r = helpers.run_new(root)
-        self.assertEqual(r.returncode, 1)  # the default R1 32 KiB error still applies
-        self.assertIn("AGENTS.md: error: R1: file is 33100 bytes, limit 32768", r.stdout)
+        self.assertEqual(r.returncode, 1)  # the default R1c 32 KiB error still applies
+        self.assertIn("AGENTS.md: error: R1c: file is 33100 bytes, limit 32768", r.stdout)
 
     def test_a_repo_config_overrides_strict(self):
-        _, hit, lines = rules_hit('extends = ["preset:strict"]\n[rules.R4]\nlevel = "off"\n')
-        self.assertEqual(hit, set(HEURISTIC) - {"R4"}, lines)
+        _, hit, lines = rules_hit('extends = ["preset:strict"]\n[rules.R4b]\nlevel = "off"\n')
+        self.assertEqual(hit, set(HEURISTIC) - {"R4b"}, lines)
 
     def test_effective_levels_in_config_json(self):
         import json
@@ -51,11 +51,11 @@ class PresetsTest(unittest.TestCase):
             files = {"AGENTS.md": "ok\n"} | ({".agentfile-lint.toml": toml} if toml else {})
             r = helpers.run_new(helpers.make_repo(files), "config", "--format", "json")
             self.assertEqual(r.returncode, 0, r.stderr)
-            rules = json.loads(r.stdout)["rules"]
-            return {k: rules[k]["level"] for k in ("R3b", "R4", "R6", "C1")}, rules["R5"]["sibling_level"]
-        self.assertEqual(levels(""), ({"R3b": "off", "R4": "off", "R6": "off", "C1": "off"}, "off"))
-        self.assertEqual(levels('extends = ["preset:strict"]\n'),
-                         ({"R3b": "warn", "R4": "warn", "R6": "warn", "C1": "warn"}, "warn"))
+            doc = json.loads(r.stdout)
+            return {k: doc["rules"][k]["level"] for k in HEURISTIC + ("R5a",)}, doc["shared"]["duplicates"]["ancestor_pairs"]
+        off = dict.fromkeys(HEURISTIC, "off")
+        self.assertEqual(levels(""), ({**off, "R5a": "warn"}, "same-name"))
+        self.assertEqual(levels('extends = ["preset:strict"]\n'), (dict.fromkeys(HEURISTIC + ("R5a",), "warn"), "any"))
 
     def test_vendored_copy_ships_strict(self):
         import subprocess, sys, tempfile

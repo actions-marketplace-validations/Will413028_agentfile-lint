@@ -20,9 +20,16 @@ from ._text import prose_lines
 ID = "R3c"
 NAME = "spec-refs"
 DESCRIPTION = "spec section references (§N) match a numbered heading in the spec document"
+CHECKS = ((ID, NAME, DESCRIPTION),)
 
 
-def validate(params: dict[str, Any]) -> dict[str, Any]:
+def validate(shared: None, tables: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    params = _params(tables)
+    return params, {ID: params}
+
+
+def _params(tables: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    params = tables[ID]
     where = f"rules.{ID}"
     check_keys(params, {"level", "specs", "ref_pattern", "heading_pattern", "ignore_qualified", "plain_words", "ignore_before"}, where)
     require_keys(params, ["specs", "ref_pattern", "heading_pattern", "ignore_qualified", "plain_words", "ignore_before"], where)
@@ -71,7 +78,7 @@ def _numbers(heading: re.Pattern[str], body: str) -> set[str]:
     return out
 
 
-def check_repo(ctx: Context, params: dict[str, Any]) -> list[Finding]:
+def check_repo(ctx: Context, params: dict[str, Any], levels: dict[str, str]) -> list[Finding]:
     ref = re.compile(params["ref_pattern"])
     heading = re.compile(params["heading_pattern"], re.MULTILINE)
     sections: dict[str, set[str] | None] = {}

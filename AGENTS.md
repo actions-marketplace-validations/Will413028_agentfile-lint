@@ -5,7 +5,7 @@
 - 本 repo 會公開：追蹤的檔案、commit 與 issue 不寫任何使用者 repo 的名稱或內部細節；設計只寫通用的部分。
 - 只用 Python 標準庫（>= 3.11，`tomllib`）；執行器不得新增第三方依賴。開發與 CI 用的工具（含 Action）也不自行新增或升級：先列出套件與版本，確認它真的存在、發布滿兩週，等同意。
 - 開發與驗證：`make check`（等同 `python3 -m unittest discover -s tests`；Python 低於 3.11 會明確失敗，可用 `make check PYTHON=python3.12`）。
-- 對自己跑檢查：`python3 -m agentfile_lint`（只掃 git 追蹤的檔案）。
+- 對自己跑檢查：`python3 -m agentfile_lint`（預設只掃 git 追蹤的檔案；`--no-git` 改為走訪目前目錄）。
 - 子命令：`vendor`、`check-pins`（各引用處釘同一個完整 SHA；experimental，不在相容性契約內）、`config --format json`（有效設定的 JSON）。
 - 新規則一律以 `warn` 進入預設 preset，升 `error` 要在 CHANGELOG 的 `Graduated` 列出（`tests/test_versioning.py` 檢查）；流程見 `docs/versioning.md`。
 - 規則是資料（`agentfile_lint/presets/*.toml`：`default` 只放客觀檢查、`strict` 加啟發式規則，見 `docs/adr/0003`；與 repo 設定檔），行為差異不寫成程式裡的 repo 專屬分支；未知設定鍵一律失敗。

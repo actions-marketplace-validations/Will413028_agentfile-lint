@@ -1,4 +1,4 @@
-"""Rules R2-R6 and C1: at least one passing and one violating fixture each (mutation-checked)."""
+"""Rules R2 to R6 and C1: at least one passing and one violating fixture each (mutation-checked)."""
 import unittest
 
 import helpers
@@ -213,77 +213,108 @@ spec = "docs/{1}.md"
         self.assertEqual((rc, only("R3c", out + err)), (0, []))
 
 
-class RotTest(unittest.TestCase):  # R4
-    CFG = '[rules.R4]\nlevel = "error"\n'
+class RotTest(unittest.TestCase):  # R4a, R4b
+    CFG = '[rules.R4a]\nlevel = "error"\n[rules.R4b]\nlevel = "warn"\n'
 
     def test_clean_text_passes(self):
         text = "Keep rules short.\nDecision in `docs/adr/2026-09-15-choice.md` and docs/plans/2026-10-01-x.md.\nVersion 1.2.3.\n"
         rc, out, err = lint({"AGENTS.md": text}, self.CFG)
-        self.assertEqual((rc, only("R4", out + err)), (0, []))
+        self.assertEqual((rc, only("R4a", out + err), only("R4b", out + err)), (0, [], []))
 
     def test_dates_and_issue_numbers_are_errors(self):
         text = "ok\nChanged on 2026-10-31 for this.\nFixes #123.\nSee issue 45 and PR 7.\n"
         rc, _, err = lint({"AGENTS.md": text}, self.CFG)
         self.assertEqual(rc, 1)
-        got = only("R4", err)
-        self.assertTrue(any(line.startswith("AGENTS.md:2: error: R4: date '2026-10-31'") for line in got), got)
-        self.assertTrue(any(line.startswith("AGENTS.md:3: error: R4: issue reference '#123'") for line in got), got)
+        got = only("R4a", err)
+        self.assertTrue(any(line.startswith("AGENTS.md:2: error: R4a: date '2026-10-31'") for line in got), got)
+        self.assertTrue(any(line.startswith("AGENTS.md:3: error: R4a: issue reference '#123'") for line in got), got)
         self.assertTrue(any("'issue 45'" in line for line in got), got)
         self.assertTrue(any("'PR 7'" in line for line in got), got)
 
     def test_date_prefixed_slug_is_a_name_not_a_date(self):
         rc, out, err = lint({"AGENTS.md": "See ADR 2026-09-25-codemeta-retirement D3.\n"}, self.CFG)
-        self.assertEqual((rc, only("R4", out + err)), (0, []))
+        self.assertEqual((rc, only("R4a", out + err)), (0, []))
 
-    def test_narrative_words_are_warnings_only(self):
+    def test_narrative_words_follow_r4b(self):
         rc, out, err = lint({"AGENTS.md": "Currently the cache is off.\nTemporarily skip it.\n"}, self.CFG)
         self.assertEqual(rc, 0)
-        self.assertEqual(len(only("R4", out)), 2)
+        self.assertEqual(len(only("R4b", out)), 2)
         self.assertEqual(err, [])
+        rc, _, err = lint({"AGENTS.md": "Currently x.\n"}, '[rules.R4b]\nlevel = "error"\n')
+        self.assertEqual((rc, len(only("R4b", err))), (1, 1))
 
-    def test_narrative_level_off_silences_them(self):
-        rc, out, err = lint({"AGENTS.md": "Currently x.\n"}, self.CFG + 'narrative_level = "off"\n')
-        self.assertEqual((rc, out, err), (0, [], []))
+    def test_each_id_turns_off_alone(self):
+        text = "Currently x.\nDone 2026-10-31.\n"
+        rc, out, err = lint({"AGENTS.md": text}, '[rules.R4a]\nlevel = "error"\n[rules.R4b]\nlevel = "off"\n')
+        self.assertEqual((rc, out, [x.split(": R4a: ")[0] for x in err]), (1, [], ["AGENTS.md:2: error"]))
+        rc, out, err = lint({"AGENTS.md": text}, '[rules.R4a]\nlevel = "off"\n[rules.R4b]\nlevel = "warn"\n')
+        self.assertEqual((rc, [x.split(": R4b: ")[0] for x in out], err), (0, ["AGENTS.md:1: warning"], []))
 
-    def test_rule_level_warn_caps_dates_to_warnings(self):
-        rc, out, err = lint({"AGENTS.md": "Done 2026-10-31.\n"}, '[rules.R4]\nlevel = "warn"\n')
+    def test_r4a_at_warn_reports_warnings(self):
+        rc, out, err = lint({"AGENTS.md": "Done 2026-10-31.\n"}, '[rules.R4a]\nlevel = "warn"\n')
         self.assertEqual(rc, 0)
-        self.assertEqual(len(only("R4", out)), 1)
+        self.assertEqual(len(only("R4a", out)), 1)
+
+    def test_keys_live_with_their_id(self):
+        for cfg, where, hint in (
+            ('[rules.R4a]\nnarrative_level = "off"\n', "rules.R4a.narrative_level", "R4b"),
+            ('[rules.R4a]\nnarrative_words = []\n', "rules.R4a.narrative_words", "R4b"),
+            ('[rules.R4b]\ndate_patterns = []\n', "rules.R4b.date_patterns", "R4a"),
+        ):
+            rc, _, err = lint({"AGENTS.md": "ok\n"}, cfg)
+            self.assertEqual(rc, 2, cfg)
+            self.assertTrue(any(where in x and hint in x.split(where, 1)[1] for x in err), err)
 
     def test_code_fences_and_comments_are_skipped(self):
         rc, out, err = lint({"AGENTS.md": "```\n2026-10-31 #12\n```\n<!-- 2026-10-31 -->\n"}, self.CFG)
         self.assertEqual((rc, out, err), (0, [], []))
 
 
-class DuplicateTest(unittest.TestCase):  # R5
-    CFG = '[rules.R5]\nlevel = "error"\n'
+def dup(shared="", r5a="error", r5b="off"):
+    return f'[shared.duplicates]\n{shared}[rules.R5a]\nlevel = "{r5a}"\n[rules.R5b]\nlevel = "{r5b}"\n'
+
+
+class DuplicateTest(unittest.TestCase):  # R5a, R5b
+    CFG = dup()
     LINE = "Always run the full test suite before you push a change to main.\n"
 
     def test_unique_short_and_heading_lines_pass(self):
         files = {"AGENTS.md": "# Title that is long enough to be counted by the rule\nshort line\n" + self.LINE,
                  "sub/AGENTS.md": "# Title that is long enough to be counted by the rule\nshort line\nOther text that differs from the root text entirely.\n"}
-        rc, out, err = lint(files, self.CFG)
-        self.assertEqual((rc, only("R5", out + err)), (0, []))
+        rc, out, err = lint(files, dup(r5b="warn"))
+        self.assertEqual((rc, only("R5a", out + err), only("R5b", out + err)), (0, [], []))
 
     def test_ancestor_descendant_duplicate_is_an_error_on_the_descendant(self):
         files = {"AGENTS.md": "x\n" + self.LINE, "sub/AGENTS.md": "y\nz\n- " + self.LINE}
         rc, out, err = lint(files, self.CFG)
         self.assertEqual(rc, 1)
-        got = only("R5", err)
+        got = only("R5a", err)
         self.assertEqual(len(got), 1, got)
-        self.assertTrue(got[0].startswith("sub/AGENTS.md:3: error: R5: line repeats AGENTS.md:2"), got)
-        self.assertEqual(only("R5", out), [])
+        self.assertTrue(got[0].startswith("sub/AGENTS.md:3: error: R5a: line repeats AGENTS.md:2"), got)
+        self.assertEqual(out, [])
 
     def test_sibling_duplicate_is_a_warning_on_both(self):
         files = {"a/AGENTS.md": self.LINE, "b/AGENTS.md": "x\n" + self.LINE, "AGENTS.md": "root\n"}
-        rc, out, err = lint(files, self.CFG + 'sibling_level = "warn"\n')
+        rc, out, err = lint(files, dup(r5b="warn"))
         self.assertEqual(rc, 0)
-        self.assertEqual(sorted(line.split(":")[0] for line in only("R5", out)), ["a/AGENTS.md", "b/AGENTS.md"])
+        self.assertEqual(sorted(line.split(":")[0] for line in only("R5b", out)), ["a/AGENTS.md", "b/AGENTS.md"])
 
-    def test_sibling_level_error_makes_them_errors(self):
+    def test_r5b_error_makes_them_errors(self):
         files = {"a/AGENTS.md": self.LINE, "b/AGENTS.md": self.LINE}
-        rc, _, err = lint(files, self.CFG + 'sibling_level = "error"\n')
+        rc, _, err = lint(files, dup(r5a="warn", r5b="error"))
         self.assertEqual(rc, 1)
+        self.assertEqual(len(only("R5b", err)), 2, err)
+
+    def test_r5b_level_does_not_reach_r5a(self):
+        files = {"AGENTS.md": self.LINE, "sub/AGENTS.md": self.LINE}
+        rc, out, err = lint(files, dup(r5a="warn", r5b="error"))
+        self.assertEqual((rc, len(only("R5a", out)), err), (0, 1, []))
+
+    def test_a_line_that_repeats_an_ancestor_is_never_a_sibling_duplicate(self):
+        # Grouped once: with R5a off, sub/AGENTS.md's line is still not reported under R5b.
+        files = {"AGENTS.md": self.LINE, "sub/AGENTS.md": self.LINE}
+        rc, out, err = lint(files, dup(r5a="off", r5b="error"))
+        self.assertEqual((rc, out, err), (0, [], []))
 
     def test_default_reports_only_same_name_ancestor_pairs(self):
         # An agent working in sub/ loads AGENTS.md and sub/AGENTS.md; the other pairs are read by
@@ -292,40 +323,51 @@ class DuplicateTest(unittest.TestCase):  # R5
                  "docs/CLAUDE.md": self.LINE, "a/AGENTS.md": "a\n" + self.LINE}
         rc, out, err = lint(files)
         self.assertEqual(rc, 0)
-        got = sorted(line.split(": warning: R5: ")[0] + " " + line.split("line repeats ")[1].split(" ")[0]
-                     for line in only("R5", out) if "line repeats" in line)
+        got = sorted(line.split(": warning: R5a: ")[0] + " " + line.split("line repeats ")[1].split(" ")[0]
+                     for line in only("R5a", out))
         self.assertEqual(got, ["a/AGENTS.md:2 AGENTS.md:1", "docs/CLAUDE.md:1 CLAUDE.md:1", "sub/AGENTS.md:1 AGENTS.md:1"])
-        self.assertEqual(only("R5", out + err), [x for x in only("R5", out) if "line repeats" in x])  # no sibling lines
+        self.assertEqual(only("R5b", out + err), [])
 
-    def test_same_name_ancestors_skip_other_pairs_for_sibling_level(self):
+    def test_same_name_ancestors_leave_other_pairs_to_r5b(self):
         # With same-name pairs only, AGENTS.md + CLAUDE.md in one directory are compared as siblings.
         files = {"AGENTS.md": self.LINE, "CLAUDE.md": self.LINE}
-        cfg = self.CFG + 'ancestor_pairs = "same-name"\nsibling_level = "warn"\n'
-        rc, out, err = lint(files, cfg)
+        rc, out, err = lint(files, dup('ancestor_pairs = "same-name"\n', r5b="warn"))
         self.assertEqual(rc, 0)
-        self.assertEqual(sorted(x.split(":")[0] for x in only("R5", out)), ["AGENTS.md", "CLAUDE.md"])
-        self.assertTrue(all("sibling file(s)" in x for x in only("R5", out)))
+        self.assertEqual(sorted(x.split(":")[0] for x in only("R5b", out)), ["AGENTS.md", "CLAUDE.md"])
+        self.assertTrue(all("sibling file(s)" in x for x in only("R5b", out)))
 
     def test_any_pairs_keep_the_0_4_behavior(self):
         files = {"AGENTS.md": self.LINE, "CLAUDE.md": self.LINE, "sub/CLAUDE.md": self.LINE}
-        rc, _, err = lint(files, self.CFG + 'ancestor_pairs = "any"\n')
+        rc, _, err = lint(files, dup('ancestor_pairs = "any"\n'))
         self.assertEqual(rc, 1)
-        self.assertEqual(sorted(x.split(": error: R5: ")[0] for x in only("R5", err)), ["CLAUDE.md:1", "sub/CLAUDE.md:1"])
+        self.assertEqual(sorted(x.split(": error: R5a: ")[0] for x in only("R5a", err)), ["CLAUDE.md:1", "sub/CLAUDE.md:1"])
 
     def test_strict_compares_any_pairs(self):
         files = {"AGENTS.md": self.LINE, "CLAUDE.md": self.LINE}
         rc, out, _ = lint(files, 'extends = ["preset:strict"]\n')
-        self.assertTrue([x for x in only("R5", out) if x.startswith("CLAUDE.md:1: warning: R5: line repeats AGENTS.md:1")], out)
+        self.assertTrue([x for x in only("R5a", out) if x.startswith("CLAUDE.md:1: warning: R5a: line repeats AGENTS.md:1")], out)
 
     def test_bad_ancestor_pairs_fails(self):
-        rc, _, err = lint({"AGENTS.md": "ok\n"}, self.CFG + 'ancestor_pairs = "same"\n')
+        rc, _, err = lint({"AGENTS.md": "ok\n"}, dup('ancestor_pairs = "same"\n'))
         self.assertEqual(rc, 2)
-        self.assertIn("rules.R5.ancestor_pairs", "\n".join(err))
+        self.assertIn("shared.duplicates.ancestor_pairs", "\n".join(err))
+
+    def test_shared_keys_and_sibling_level_name_their_new_place(self):
+        for cfg, where, hint in (
+            ('[rules.R5a]\nmin_chars = 10\n', "rules.R5a.min_chars", "[shared.duplicates]"),
+            ('[rules.R5b]\nancestor_pairs = "any"\n', "rules.R5b.ancestor_pairs", "[shared.duplicates]"),
+            ('[rules.R5a]\nsibling_level = "warn"\n', "rules.R5a.sibling_level", "R5b"),
+            ('[shared.duplicates]\nlevel = "warn"\n', "shared.duplicates", "unknown key"),
+            ('[shared.dupes]\nmin_chars = 10\n', "shared", "unknown key"),
+        ):
+            rc, _, err = lint({"AGENTS.md": "ok\n"}, cfg)
+            self.assertEqual(rc, 2, cfg)
+            self.assertTrue(any(where in x and hint in x.split(where, 1)[1] for x in err), (cfg, err))
 
     def test_threshold_is_configurable(self):
         files = {"AGENTS.md": "short repeated line\n", "sub/AGENTS.md": "short repeated line\n"}
         self.assertEqual(lint(files, self.CFG)[0], 0)
-        self.assertEqual(lint(files, self.CFG + "min_chars = 10\n")[0], 1)
+        self.assertEqual(lint(files, dup("min_chars = 10\n"))[0], 1)
 
     def test_compares_the_full_set_even_when_a_file_is_named(self):
         files = {"AGENTS.md": self.LINE, "sub/AGENTS.md": self.LINE}

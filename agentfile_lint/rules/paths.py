@@ -22,6 +22,7 @@ from ._text import code_spans, prose_lines
 ID = "R3b"
 NAME = "path-refs"
 DESCRIPTION = "paths referenced in backticks exist (multi-base resolution; heuristic)"
+CHECKS = ((ID, NAME, DESCRIPTION),)
 
 _KEYS = {
     "level", "base_dirs", "source_roots", "resolve_extensions", "file_extensions",
@@ -31,7 +32,13 @@ _SHAPE = re.compile(r"[A-Za-z0-9_./@+-]+")  # a path-like token; anything else (
 _SUFFIX = re.compile(r"(?::\d+(?:-\d+)?|#[\w-]+)$")
 
 
-def validate(params: dict[str, Any]) -> dict[str, Any]:
+def validate(shared: None, tables: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    params = _params(tables)
+    return params, {ID: params}
+
+
+def _params(tables: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    params = tables[ID]
     where = f"rules.{ID}"
     check_keys(params, _KEYS, where)
     require_keys(params, _KEYS - {"level"}, where)
@@ -92,7 +99,7 @@ def _exists(token: str, bases: list[str], ctx: Context, params: dict[str, Any]) 
     return False
 
 
-def check_repo(ctx: Context, params: dict[str, Any]) -> list[Finding]:
+def check_repo(ctx: Context, params: dict[str, Any], levels: dict[str, str]) -> list[Finding]:
     found: list[Finding] = []
     words = [w.lower() for w in params["ignore_negated_words"]]
     for path, text in ctx.files.items():

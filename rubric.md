@@ -30,7 +30,7 @@ that applies everywhere belongs in the root file, once. Agents load subdirectory
 some read a subdirectory's file when they touch files there, others read only the files from the
 root down to the directory they started in, so a rule an agent must not miss when started at the
 root stays in the root file. The linter catches only lines that are identical after collapsing whitespace and dropping list
-markers, at least `min_chars` long (R5, 40 by default), and skips headings by default; look for
+markers, at least `min_chars` long (R5a and R5b, 40 by default), and skips headings by default; look for
 paraphrases, short copies and repeated headings of the same rule at two levels.
 
 **J3. Checkable.** A rule has a way to fail: a test, a CI step, or a command whose output is the

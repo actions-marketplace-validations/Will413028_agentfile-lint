@@ -6,26 +6,26 @@ from agentfile_lint import discover
 
 GLOBS = ["AGENTS.md", "**/AGENTS.md", "CLAUDE.md", "**/CLAUDE.md"]
 BIG = "x" * 600 + "\n"
-R1_LINE = {".agentfile-lint.toml": "[rules.R1]\nmax_line_chars = 500\n"}  # BIG violates it, if analyzed
+R1_LINE = {".agentfile-lint.toml": "[rules.R1d]\nlevel = \"error\"\nmax_chars = 500\n"}  # BIG violates it, if analyzed
 
 
 class DiscoverTest(unittest.TestCase):
     def test_ignores_local_md_files_even_when_tracked(self):
         root = helpers.make_repo({"AGENTS.md": "ok\n", "NOTES.local.md": BIG, "sub/CLAUDE.local.md": BIG, **R1_LINE})
-        self.assertEqual(discover.instruction_files(root, GLOBS), ["AGENTS.md"])
+        self.assertEqual(discover.instruction_files(root, GLOBS, discover.list_files(root)), ["AGENTS.md"])
         self.assertEqual(helpers.run_new(root).returncode, 0)
 
     def test_ignores_untracked_files(self):
         root = helpers.make_repo({"AGENTS.md": "ok\n", **R1_LINE})
         (root / "sub").mkdir()
         (root / "sub" / "AGENTS.md").write_text(BIG)  # not added to git
-        self.assertEqual(discover.instruction_files(root, GLOBS), ["AGENTS.md"])
+        self.assertEqual(discover.instruction_files(root, GLOBS, discover.list_files(root)), ["AGENTS.md"])
         self.assertEqual(helpers.run_new(root).returncode, 0)
 
     def test_finds_nested_agents_and_claude_files(self):
         root = helpers.make_repo({"AGENTS.md": "a", "a/b/AGENTS.md": "a", "CLAUDE.md": "@AGENTS.md\n", "x/CLAUDE.md": "c", "notes.md": "n"})
         self.assertEqual(
-            discover.instruction_files(root, GLOBS),
+            discover.instruction_files(root, GLOBS, discover.list_files(root)),
             ["AGENTS.md", "CLAUDE.md", "a/b/AGENTS.md", "x/CLAUDE.md"],
         )
 
@@ -47,7 +47,7 @@ class DiscoverTest(unittest.TestCase):
         root = helpers.make_repo({"AGENTS.md": "ok\n", "sub/AGENTS.md": BIG, "README.md": "r\n", **R1_LINE})
         r = helpers.run_new(root, "AGENTS.md")
         self.assertEqual(r.returncode, 1)
-        self.assertIn("sub/AGENTS.md:1: error: R1", r.stdout)
+        self.assertIn("sub/AGENTS.md:1: error: R1d", r.stdout)
         # An irrelevant file name skips the run entirely.
         self.assertEqual(helpers.run_new(root, "README.md").returncode, 0)
 

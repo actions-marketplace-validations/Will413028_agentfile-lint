@@ -19,12 +19,19 @@ from ._text import prose_lines
 ID = "R2"
 NAME = "shape"
 DESCRIPTION = "required section headings in order (and optional title, purpose, bullet-only sections)"
+CHECKS = ((ID, NAME, DESCRIPTION),)
 
 _MODES = ("exact", "ordered")
 _SHAPE_KEYS = {"glob", "sections", "mode", "heading_level", "title", "purpose", "bullets_only", "must_match"}
 
 
-def validate(params: dict[str, Any]) -> dict[str, Any]:
+def validate(shared: None, tables: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    params = _params(tables)
+    return params, {ID: params}
+
+
+def _params(tables: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    params = tables[ID]
     where = f"rules.{ID}"
     check_keys(params, {"level", "shapes"}, where)
     require_keys(params, ["shapes"], where)
@@ -60,7 +67,7 @@ def _heading_re(level: int) -> re.Pattern[str]:
     return re.compile(r"^" + "#" * level + r"(?!#)[ \t]+(.*?)[ \t]*#*[ \t]*$")
 
 
-def check(path: str, text: str, params: dict[str, Any]) -> list[Finding]:
+def check(path: str, text: str, params: dict[str, Any], levels: dict[str, str]) -> list[Finding]:
     shape = next((s for s in params["shapes"] if glob_to_regex(s["glob"]).match(path)), None)
     if shape is None:
         return []

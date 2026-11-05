@@ -79,7 +79,7 @@ def _per_line(one: Callable[[Finding], str]) -> Callable[[Iterable[Finding]], st
     return lambda findings: "".join(one(f) + "\n" for f in findings)
 
 
-# `--format` value -> the complete stdout for a list of findings.
+# `--format` value -> the complete stdout for a list of findings (`sarif` is added in `cli`).
 RENDERERS: dict[str, Callable[[Iterable[Finding]], str]] = {
     "text": _per_line(Finding.format),
     "json": _render_json,

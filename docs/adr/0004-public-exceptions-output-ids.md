@@ -2,7 +2,7 @@
 
 Status: accepted. Amends decision 3 of ADR 0001 (permanent exceptions; the reason for rejecting
 inline comments) and replaces parity with the legacy checker as the specification of R1 sizes
-(`docs/design.md`). Planned for 0.6.0; until then the code on `dev` changes one part at a time.
+(`docs/design.md`). Decision 4 ("existing ids are not renamed") is amended by ADR 0005; decision 3 (overrides only lower) by ADR 0006 (`raise = true`, `unset`); decision 6 (no inline comments) by ADR 0006 (per-line directives). Planned for 0.6.0; until then the code on `dev` changes one part at a time.
 
 ## Context
 

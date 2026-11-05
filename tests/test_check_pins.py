@@ -125,12 +125,12 @@ class ConfigJsonTest(unittest.TestCase):
         data = json.loads(a.stdout)
         self.assertEqual(list(data), sorted(data))
         self.assertEqual(a.stdout, json.dumps(data, sort_keys=True, indent=2, ensure_ascii=False) + "\n")
-        self.assertEqual(data["rules"]["R1"]["path_limits"][0]["max_bytes"], 32768)
+        self.assertEqual(data["rules"]["R1c"]["limits"][0]["max_bytes"], 32768)
         self.assertEqual(data["rules"]["C1"]["mode"], "import-only")
 
     def test_reflects_the_repo_config_merge(self):
         toml = ('[rules.R2]\nlevel = "error"\n[[rules.R2.shapes]]\nglob = "m/*/AGENTS.md"\nsections = ["A", "B"]\n'
-                '[[allowlist.entries]]\nrule = "R1"\npath = "AGENTS.md"\nreason = "r"\nexpires = 2026-07-01\n')
+                '[[allowlist.entries]]\nrule = "R1c"\npath = "AGENTS.md"\ncount = 1\nreason = "r"\nexpires = 2026-07-01\n')
         r = self.run_config({"AGENTS.md": "x\n", ".agentfile-lint.toml": toml})
         self.assertEqual(r.returncode, 0, r.stderr)
         data = json.loads(r.stdout)

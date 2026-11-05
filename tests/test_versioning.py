@@ -4,6 +4,7 @@ import tomllib
 import unittest
 
 import helpers
+from agentfile_lint.rules import RETIRED
 
 CHANGELOG = (helpers.REPO / "CHANGELOG.md").read_text(encoding="utf-8")
 PRESETS_DIR = helpers.REPO / "agentfile_lint" / "presets"
@@ -38,7 +39,8 @@ class VersioningTest(unittest.TestCase):
         self.assertEqual(PRESET["rules"]["R2"]["level"], "warn")  # at least one non-graduated rule is checked
 
     def test_graduated_rules_exist_in_the_preset(self):
-        self.assertTrue(graduated(CHANGELOG) <= set(PRESET["rules"]))
+        # A retired id (R1, split in 0.7.0) stays in the released sections; its successors are listed.
+        self.assertTrue(graduated(CHANGELOG) - set(RETIRED) <= set(PRESET["rules"]))
 
     def test_the_lint_itself_detects_a_violation(self):
         text = "## [1.0.0]\n\n### Graduated\n\n- `R1`: shipped at error\n\n### Added\n\n- `R2` something\n"

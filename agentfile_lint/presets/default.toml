@@ -1,9 +1,9 @@
 # Default preset shipped with agentfile-lint. Repo configs extend it and override single keys.
-# It runs only objective checks; the heuristic rules (R3b, R4, R6, R5 between siblings) and the C1
+# It runs only objective checks; the heuristic rules (R3b, R4a, R4b, R5b, R6) and the C1
 # convention are `off` here and turned on by `extends = ["preset:strict"]` (presets/strict.toml).
 extends = []
-# Shipped presets carry no [[overrides]]: overrides concatenate under `extends`, so a repository could
-# not undo one inherited from here. Overrides belong in the repository's own config (docs/design.md).
+# Shipped presets carry no [[overrides]]: overrides concatenate under `extends`, and a path scope is a
+# property of one repository's layout. Overrides belong in the repository's own config (docs/design.md).
 
 [discover]
 globs = ["AGENTS.md", "**/AGENTS.md", "CLAUDE.md", "**/CLAUDE.md"]
@@ -13,43 +13,54 @@ max_days = 90     # reject `expires` later than today + max_days
 max_entries = 10  # more entries than this fails the configuration
 warn_days = 14    # warn when an entry expires within this many days
 
-[rules.R1]
-level = "error"
-# max_line_chars = 500  # optional: a character limit per line; omitted, line length is not checked
-excluded_blocks = []   # list of { begin = "...", end = "..." } marker pairs not counted
+# Parameters several rule ids share (docs/adr/0005). `excluded_blocks`: marker pairs whose text (and one
+# trailing line ending) R1a, R1b and R1d do not count; R1c counts every byte an agent reads.
+[shared.size]
+excluded_blocks = []   # list of { begin = "...", end = "..." }
 
-# The default uses only limits with an external source.
+# Size is four ids (R1a to R1d), each with one level. The default uses only limits with an external source.
+# `limits` lists replace as a whole: a repository config that sets one replaces the preset's list.
 #
-# Combined size along the path (`path_limits`): a file plus the files matching the same glob in its
-# ancestor directories, reported where the total first exceeds `max_bytes` (`level` optional). Codex
-# reads AGENTS.md from the root down to the working directory and stops adding files once they total
-# 32 KiB (`project_doc_max_bytes`, https://learn.chatgpt.com/docs/agent-configuration/agents-md): a hard
+# R1a per-file bytes and R1b per-file lines: by path glob, the first matching entry of that id's
+# `limits` applies; a file that matches no entry has no limit. Claude Code asks for fewer than 200
+# lines per CLAUDE.md file (https://code.claude.com/docs/en/memory) and reads AGENTS.md when no
+# CLAUDE.md exists; guidance, not a point where text is dropped, so R1b is a warning. Claude Code's
+# per-file character limit is not checked here (docs/rules.md, R1b).
+[rules.R1a]
+level = "error"
+limits = []   # list of { glob = "...", max_bytes = N }
+
+[rules.R1b]
+level = "warn"
+
+[[rules.R1b.limits]]
+glob = "**/AGENTS.md"
+max_lines = 200
+
+[[rules.R1b.limits]]
+glob = "**/CLAUDE.md"
+max_lines = 200
+
+# R1c combined bytes on a path: a file plus the files matching the same glob in its ancestor
+# directories, reported where the total first exceeds `max_bytes`; every entry applies. Codex reads
+# AGENTS.md from the root down to the working directory and stops adding files once they total 32 KiB
+# (`project_doc_max_bytes`, https://learn.chatgpt.com/docs/agent-configuration/agents-md): a hard
 # limit, so an error. A single file over the limit is reported the same way.
-[[rules.R1.path_limits]]
+[rules.R1c]
+level = "error"
+
+[[rules.R1c.limits]]
 glob = "**/AGENTS.md"
 max_bytes = 32768
 
-# Per-file limits by path glob: the first matching entry applies; a file that matches no entry has no
-# per-file limit. Either or both of max_bytes and max_lines may be set; `bytes_level` / `lines_level`
-# set each one's level (omitted: the rule level; never above it). Claude Code asks for fewer than 200
-# lines per CLAUDE.md file (https://code.claude.com/docs/en/memory) and reads AGENTS.md when no
-# CLAUDE.md exists; guidance, not a point where text is dropped, so a warning. Claude Code's per-file
-# character limit is not checked here (docs/rules.md, R1).
-# A repository config that sets `limits` or `path_limits` replaces that whole list.
-[[rules.R1.limits]]
-glob = "**/AGENTS.md"
-max_lines = 200
-lines_level = "warn"
-
-[[rules.R1.limits]]
-glob = "**/CLAUDE.md"
-max_lines = 200
-lines_level = "warn"
+# R1d characters per line; `max_chars` is required once the level is not off.
+[rules.R1d]
+level = "off"
+# max_chars = 500
 
 # ---------------------------------------------------------------------------------------------
-# Rules added after R1 enter at `warn` (see CHANGELOG, "Graduated"). A repository raises a rule
-# with `level = "error"` in its own config once it is clean; sub-levels (narrative_level,
-# sibling_level) apply only up to the rule's own level.
+# Rules other than R1a and R1c enter at `warn` (see CHANGELOG, "Graduated"). A repository raises a rule
+# with `level = "error"` in its own config once it is clean.
 # ---------------------------------------------------------------------------------------------
 
 # R2 shape: section headings in order. `shapes` is empty here; a repository lists its own:
@@ -112,11 +123,10 @@ ignore_qualified = true   # `other-doc §3` points elsewhere and is skipped...
 ignore_before = []        # skip a reference when the text before it on the line matches one of these regexes
 plain_words = ["see", "spec", "specification", "section", "sections", "in", "per", "and", "or", "to", "at", "of", "the", "also", "cf", "ref"]  # ...unless the word before is one of these
 
-# R4 rot: dates and issue numbers at the rule level, narrative words at narrative_level.
+# R4a dated references (dates, issue numbers) and R4b narrative words.
 # Off by default (heuristic); preset:strict sets warn.
-[rules.R4]
+[rules.R4a]
 level = "off"
-narrative_level = "warn"
 date_patterns = ['(?<![0-9])(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])(?![0-9])']
 issue_patterns = [
   '(?<![A-Za-z0-9_&#/])#\d+(?![A-Za-z0-9_])',
@@ -124,24 +134,32 @@ issue_patterns = [
 ]
 # Names that carry a date are not dates: a path, a file name, a date-prefixed slug (`2026-01-02-title`).
 ignore_token_patterns = ['/', '\.(?:md|txt|sql|go|ts|tsx|js|py|toml|ya?ml|json)\b', '(?:19|20)[0-9]{2}-[0-9]{2}-[0-9]{2}-[A-Za-z]']
+
+[rules.R4b]
+level = "off"
 narrative_words = [
   "currently", "recently", "previously", "formerly", "no longer", "used to", "for now",
   "at the moment", "temporarily", "newly",
   "目前", "最近", "近期", "暫時", "以前", "原本", "已改為", "已移除",
 ]
 
-# R5 duplicates: identical lines (>= min_chars) in an ancestor and a descendant file at the rule
-# level, in sibling files at sibling_level. Always compares the full tracked set.
+# R5a and R5b duplicates: identical lines (>= min_chars) in an ancestor and a descendant file (R5a,
+# on the descendant) or in other files (R5b). Always compares the full tracked set.
 # `ancestor_pairs`: `same-name` counts only same-name files in ancestor directories (AGENTS.md and
 # sub/AGENTS.md, which one agent loads together); `any` also counts different names and files in one
-# directory. Other pairs are siblings. Both are off by default; preset:strict sets `any` and warn.
-[rules.R5]
-level = "warn"
-sibling_level = "off"
+# directory. Other pairs are R5b. preset:strict sets `any` and turns R5b on at warn.
+[shared.duplicates]
 ancestor_pairs = "same-name"
 min_chars = 40
 ignore_headings = true
 ignore_patterns = []
+exclude = []          # globs left out of the R5a/R5b comparison entirely
+
+[rules.R5a]
+level = "warn"
+
+[rules.R5b]
+level = "off"
 
 # R6 copied constants: candidates only, always warnings. Off by default (heuristic); preset:strict sets warn.
 [rules.R6]

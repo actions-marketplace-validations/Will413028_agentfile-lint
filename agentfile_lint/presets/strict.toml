@@ -1,18 +1,24 @@
 # preset:strict -- the default preset plus the heuristic rules and the C1 convention, all as warnings.
 # Use it with `extends = ["preset:strict"]`; a repository config can still override single keys.
-# These rules guess (R3b, R4, R6) or check a convention (C1, R5 between siblings), so they are off in
+# These rules guess (R3b, R4a, R4b, R6) or check a convention (C1, R5b), so they are off in
 # the default preset; docs/rules.md lists their measured false-positive rates.
 # No `extends` here: a shipped preset without one extends preset:default.
 
 [rules.R3b]
 level = "warn"
 
-[rules.R4]
+[rules.R4a]
 level = "warn"
 
-[rules.R5]
-sibling_level = "warn"
+[rules.R4b]
+level = "warn"
+
+[shared.duplicates]
 ancestor_pairs = "any"
+exclude = []
+
+[rules.R5b]
+level = "warn"
 
 [rules.R6]
 level = "warn"

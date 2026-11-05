@@ -5,9 +5,11 @@ changed from 0.4.0 to 0.5.0, and what the findings that were real looked like. M
 the releases from PyPI. Per-rule reasons and false-positive rates are in `docs/rules.md`.
 
 0.6.0 was rerun on the same 22 commits on 2026-11-04 (`--format json`, with no config and with
-`preset:strict`): every finding (file, line, rule, level) and every exit code is identical to 0.5.0,
-so the numbers below hold for 0.6.0 too. 0.5.0 was rerun alongside it and reproduced the 2026-11-03
-totals exactly.
+`preset:strict`): every finding (file, line, rule, level) and every exit code is identical to 0.5.0.
+0.5.0 was rerun alongside it and reproduced the 2026-11-03 totals exactly. 0.7.0 was rerun on
+2026-11-05 the same way: every finding keeps its file, line and level and every exit code is the same
+as 0.6.0; only the rule ids changed, since 0.7.0 gives each check its own id (`docs/adr/0005`). The
+numbers below hold for 0.5.0 to 0.7.0 and use the 0.7.0 ids.
 
 ## Summary
 
@@ -18,7 +20,7 @@ totals exactly.
   limit on their own.
 - The other 0.5.0 findings are 20 files over 200 lines and 67 lines repeated between a file and its
   same-name ancestor. In the held-out sample, 0 of 13 repeated lines were false positives.
-- The heuristic rules (R3b, R4, R6, C1 and R5 across names) were wrong 76% to 100% of the time on the
+- The heuristic rules (R3b, R4a, R4b, R6, C1 and R5b across names) were wrong 76% to 100% of the time on the
   tuning sample, so 0.5.0 runs them only with `preset:strict`.
 
 ## Sample
@@ -38,11 +40,15 @@ totals exactly.
 
 All 22 repositories, no config:
 
-| | repos exit 1 | repos with findings | R1 error | R1 warn | R5 | R3b | R4 | R6 | C1 | total |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 0.4.0 | 12 | 19 | 339 | 0 | 278 | 225 | 160 | 40 | 54 | 1096 |
-| 0.5.0 | 6 | 11 | 16 | 20 | 67 | off | off | off | off | 103 |
-| 0.5.0 `preset:strict` | 6 | 19 | 16 | 20 | 174 | 222 | 159 | 40 | 50 | 681 |
+| | repos exit 1 | repos with findings | R1c error | R1b warn | R5a | R5b | R3b | R4a | R4b | R6 | C1 | total |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 0.4.0 | 12 | 19 | 339 (R1) | 0 | 278 (R5) | | 225 | 160 (R4) | | 40 | 54 | 1096 |
+| 0.5.0 to 0.7.0 | 6 | 11 | 16 | 20 | 67 | off | off | off | off | off | off | 103 |
+| 0.5.0 to 0.7.0 `preset:strict` | 6 | 19 | 16 | 20 | 87 | 87 | 222 | 108 | 51 | 40 | 50 | 681 |
+
+0.4.0 had one id for each of R1, R4 and R5 and was not rerun per check: its counts for each group
+are in the first column of the group. In 0.4.0 every R1 check (bytes per file, lines, line length)
+was an `error`.
 
 What changed, by cause:
 
@@ -66,28 +72,28 @@ Run time with 0.5.0: at most 4.9 s, for the repository with 27 instruction files
 
 Paraphrased, with names and text changed, so the examples cannot be searched for.
 
-**Text an agent never reads (R1, error).** For example, a root `AGENTS.md` of about 20 KiB plus a
+**Text an agent never reads (R1c, error).** For example, a root `AGENTS.md` of about 20 KiB plus a
 package `AGENTS.md` of about 13 KiB. Each file is reasonable alone; together they pass 32 KiB, so Codex
 working inside that package reads the root file and only part of the package file, and does not say
 so. This is the most common finding: 6 of 22 repositories. In 4 the total is a root file plus one or two
 files below it, over by 0.3 KiB to 22 KiB; in 2 the root file alone is over, at 71 KiB and 213 KiB.
 
-**Copies that have already drifted (R5).** A package's `AGENTS.md` repeats eight lines of the root
+**Copies that have already drifted (R5a).** A package's `AGENTS.md` repeats eight lines of the root
 file's "frontend quick reference". An agent in that package loads both. In two neighbouring lines the
 copies already disagree (which icon library to use, how strict the typing rule is), so the agent gets
 two versions of one rule. Another repository had a generated bootstrap file in a subdirectory that
 repeats three lines of the root one.
 
-**A known false positive (R5).** One tuning repository keeps translated copies of its instruction files
+**A known false positive (R5a).** One tuning repository keeps translated copies of its instruction files
 under `docs/<language>/` and examples under `examples/`. All 54 same-name findings there are deliberate
-copies. Since 0.6.0 such a repository turns R5 off for those paths with `[[overrides]]`
-(`docs/rules.md`, R5).
+copies. Since 0.6.0 such a repository turns the rule off for those paths with `[[overrides]]`
+(`docs/rules.md`, R5a).
 
 With `preset:strict`, the real ones among the sampled candidates:
 
 - **A path that moved (R3b).** "Skills go in `skills/<name>/`", while that kind of skill now lives in
   another top-level directory.
-- **History instead of a rule (R4).** "PR #NNNN moved the internals; the compatibility layer is
+- **History instead of a rule (R4a).** "PR #NNNN moved the internals; the compatibility layer is
   removed after its window ends": true when written, stale once the window passed.
 - **A value copied from code (R6).** A file states the exact character limit and the dependency-age
   window that are set in the source and the build config; when the code changes, the file is wrong and nothing fails.

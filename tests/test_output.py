@@ -6,27 +6,33 @@ finding, all on stdout. `--format json` and `--format github` carry the same fin
 from __future__ import annotations
 
 import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
 import unittest
+from pathlib import Path
 
 import helpers
 from agentfile_lint.finding import Finding, format_github
 
-# A line R5 reports (>= 40 characters) that holds every character GitHub escaping cares about in a message.
+# A line R5a reports (>= 40 characters) that holds every character GitHub escaping cares about in a message.
 SHARED = "Use 100% of the budget: split it a, b and c across the files"
 CONFIG = (
-    "[rules.R1]\nmax_line_chars = 500\n"
-    '[[rules.R1.limits]]\nglob = "AGENTS.md"\nmax_lines = 1\nlines_level = "warn"\n'
+    '[rules.R1d]\nlevel = "error"\nmax_chars = 500\n'
+    '[[rules.R1b.limits]]\nglob = "AGENTS.md"\nmax_lines = 1\n'
 )
 FILES = {
     "AGENTS.md": SHARED + "\n" + "y" * 600 + "\n",  # whole-file warning (2 lines) and a line error
-    "a,b/AGENTS.md": SHARED + "\n",                  # R5 warning on a path with a comma
+    "a,b/AGENTS.md": SHARED + "\n",                  # R5a warning on a path with a comma
     ".agentfile-lint.toml": CONFIG,
 }
 R5_MESSAGE = f"line repeats AGENTS.md:1 ('{SHARED}'); keep it in the ancestor only"
 TEXT = [
-    "AGENTS.md: warning: R1: file is 2 lines, limit 1",
-    "AGENTS.md:2: error: R1: line is 600 characters, limit 500",
-    f"a,b/AGENTS.md:1: warning: R5: {R5_MESSAGE}",
+    "AGENTS.md: warning: R1b: file is 2 lines, limit 1",
+    "AGENTS.md:2: error: R1d: line is 600 characters, limit 500",
+    f"a,b/AGENTS.md:1: warning: R5a: {R5_MESSAGE}",
 ]
 
 
@@ -49,7 +55,7 @@ class TextFormatTest(unittest.TestCase):
         self.assertEqual(run(FILES, "--format", "text").stdout, run(FILES).stdout)
 
     def test_non_ascii_output_survives_a_non_utf8_pipe(self):
-        # A Windows runner pipes stdout as cp1252; findings quote file text (here an R5 line in CJK).
+        # A Windows runner pipes stdout as cp1252; findings quote file text (here an R5a line in CJK).
         line = "所有指令檔都必須通過檢查，否則持續整合會失敗並停止合併這個變更；例外要寫在設定檔並附上理由與期限"  # >= 40 chars
         root = helpers.make_repo({"AGENTS.md": line + "\n", "sub/AGENTS.md": line + "\n"})
         env = dict(helpers.os.environ, PYTHONPATH=str(helpers.REPO), PYTHONIOENCODING="cp1252")
@@ -57,12 +63,44 @@ class TextFormatTest(unittest.TestCase):
             r = helpers.subprocess.run([helpers.sys.executable, "-m", "agentfile_lint", "--format", fmt],
                                        cwd=root, env=env, capture_output=True)
             self.assertEqual((r.returncode, r.stderr), (0, b""), fmt)
-            self.assertIn(line[:20].encode("utf-8"), r.stdout, fmt)  # R5 quotes the start of the line
+            self.assertIn(line[:20].encode("utf-8"), r.stdout, fmt)  # R5a quotes the start of the line
 
     def test_unknown_format_is_a_usage_error(self):
-        r = run(FILES, "--format", "sarif")
+        r = run(FILES, "--format", "xml")
         self.assertEqual((r.returncode, r.stdout), (2, ""))
         self.assertIn("--format", r.stderr)
+
+
+class PathPrefixTest(unittest.TestCase):
+    """`--path-prefix` (the Action's `working-directory`): every format reports workspace-relative paths."""
+
+    def test_github_annotations_get_the_prefix(self):
+        r = run(FILES, "--format", "github", "--path-prefix", "sub")
+        self.assertEqual([line.split(",")[0] for line in r.stdout.splitlines()],
+                         ["::warning file=sub/AGENTS.md", "::error file=sub/AGENTS.md", "::warning file=sub/a%2Cb/AGENTS.md"])
+        self.assertIn("::sub/AGENTS.md: warning: R1b:", r.stdout)
+
+    def test_prefix_is_normalized(self):
+        r = run(FILES, "--path-prefix", "./sub//x/")
+        self.assertTrue(r.stdout.startswith("sub/x/AGENTS.md: warning: R1b:"), r.stdout)
+
+    def test_absolute_or_escaping_prefix_is_a_usage_error(self):
+        for bad in ("/home/runner/work/r", "../up", ".."):
+            with self.subTest(bad):
+                r = run(FILES, "--path-prefix", bad)
+                self.assertEqual((r.returncode, r.stdout), (2, ""))
+                self.assertIn("--path-prefix", r.stderr)
+
+    def test_paths_outside_the_repo_keep_their_form(self):
+        from agentfile_lint.cli import _prefixed
+        self.assertEqual(_prefixed("sub", "../shared.toml"), "../shared.toml")
+        self.assertEqual(_prefixed("sub", "/etc/x.toml"), "/etc/x.toml")
+        self.assertEqual(_prefixed("sub", "a/AGENTS.md"), "sub/a/AGENTS.md")
+
+    def test_dot_and_empty_change_nothing(self):
+        plain = run(FILES).stdout
+        self.assertEqual(run(FILES, "--path-prefix", ".").stdout, plain)
+        self.assertEqual(run(FILES, "--path-prefix", "").stdout, plain)
 
 
 class JsonFormatTest(unittest.TestCase):
@@ -72,9 +110,9 @@ class JsonFormatTest(unittest.TestCase):
         self.assertEqual(json.loads(r.stdout), {
             "version": 1,
             "findings": [
-                {"file": "AGENTS.md", "line": None, "level": "warning", "rule": "R1", "message": "file is 2 lines, limit 1"},
-                {"file": "AGENTS.md", "line": 2, "level": "error", "rule": "R1", "message": "line is 600 characters, limit 500"},
-                {"file": "a,b/AGENTS.md", "line": 1, "level": "warning", "rule": "R5", "message": R5_MESSAGE},
+                {"file": "AGENTS.md", "line": None, "level": "warning", "rule": "R1b", "message": "file is 2 lines, limit 1"},
+                {"file": "AGENTS.md", "line": 2, "level": "error", "rule": "R1d", "message": "line is 600 characters, limit 500"},
+                {"file": "a,b/AGENTS.md", "line": 1, "level": "warning", "rule": "R5a", "message": R5_MESSAGE},
             ],
         })
 
@@ -100,9 +138,9 @@ class GithubFormatTest(unittest.TestCase):
         self.assertEqual((r.returncode, r.stderr), (1, ""))
         self.assertEqual(r.stdout.splitlines(), [
             # Whole file: no `line`, so GitHub shows it on line 1; the message keeps the text line.
-            "::warning file=AGENTS.md,title=R1::AGENTS.md: warning: R1: file is 2 lines, limit 1",
-            "::error file=AGENTS.md,line=2,title=R1::AGENTS.md:2: error: R1: line is 600 characters, limit 500",
-            "::warning file=a%2Cb/AGENTS.md,line=1,title=R5::a,b/AGENTS.md:1: warning: R5: "
+            "::warning file=AGENTS.md,title=R1b::AGENTS.md: warning: R1b: file is 2 lines, limit 1",
+            "::error file=AGENTS.md,line=2,title=R1d::AGENTS.md:2: error: R1d: line is 600 characters, limit 500",
+            "::warning file=a%2Cb/AGENTS.md,line=1,title=R5a::a,b/AGENTS.md:1: warning: R5a: "
             + R5_MESSAGE.replace("%", "%25"),
         ])
 
@@ -125,6 +163,55 @@ class GithubFormatTest(unittest.TestCase):
         text = (helpers.REPO / "action.yml").read_text(encoding="utf-8")
         self.assertIn("args=(--format github)", text)
 
+    def test_action_working_directory_is_an_input_and_the_run_step_uses_it(self):
+        # No YAML parser in the standard library: check the lines that carry the meaning.
+        lines = (helpers.REPO / "action.yml").read_text(encoding="utf-8").splitlines()
+        setup = lines.index(next(x for x in lines if "actions/setup-python@" in x))
+        self.assertEqual(lines[setup + 1:setup + 3], ["      with:", "        python-version: ${{ inputs.python-version }}"])
+        self.assertEqual([x.strip() for x in lines if "working-directory:" in x],
+                         ["working-directory:", "working-directory: ${{ inputs.working-directory }}"])
+        self.assertIn("  working-directory:", lines)  # an input, at the inputs level
+        self.assertIn('args+=(--path-prefix "$prefix")', "\n".join(lines))
+
+
+class ActionRunScriptTest(unittest.TestCase):
+    """The action's `run:` script, executed by bash the way the runner does: a repository checked out to
+    `$GITHUB_WORKSPACE/sub` gets workspace-relative annotation paths; `working-directory` pointing inside
+    the workspace's own repository adds nothing."""
+
+    @staticmethod
+    def script() -> str:
+        lines = (helpers.REPO / "action.yml").read_text(encoding="utf-8").splitlines()
+        start = lines.index("      run: |") + 1
+        return "\n".join(x[8:] for x in lines[start:] if x.startswith("        ") or not x.strip())
+
+    def run_in(self, workspace: Path, cwd: Path) -> str:
+        shim = Path(tempfile.mkdtemp(prefix="il-shim-"))  # the runner's `python` is setup-python's
+        (shim / "python").symlink_to(sys.executable)
+        env = dict(os.environ, PATH=f"{shim}{os.pathsep}{os.environ['PATH']}", GITHUB_WORKSPACE=str(workspace),
+                   IL_ACTION_PATH=str(helpers.REPO), IL_CONFIG="")
+        r = subprocess.run(["bash", "-e", "-c", self.script()], cwd=cwd, env=env, capture_output=True, text=True)
+        self.assertEqual(r.stderr, "")
+        return r.stdout
+
+    def test_checkout_in_a_subdirectory_gets_the_prefix(self):
+        workspace = Path(tempfile.mkdtemp(prefix="il-ws-"))
+        repo = helpers.make_repo({"AGENTS.md": SHARED + "\n", "a/AGENTS.md": SHARED + "\n"})
+        shutil.move(str(repo), workspace / "sub")
+        out = self.run_in(workspace, workspace / "sub")
+        self.assertIn("::warning file=sub/a/AGENTS.md,line=1,title=R5a::sub/a/AGENTS.md:1:", out)
+
+    def test_subdirectory_of_the_workspace_repo_adds_no_prefix(self):
+        repo = helpers.make_repo({"AGENTS.md": SHARED + "\n", "a/AGENTS.md": SHARED + "\n"})
+        out = self.run_in(repo, repo / "a")
+        self.assertIn("::warning file=a/AGENTS.md,line=1,title=R5a::", out)
+
+
+    def test_git_root_above_the_workspace_adds_no_prefix(self):
+        repo = helpers.make_repo({"AGENTS.md": SHARED + "\n", "w/AGENTS.md": SHARED + "\n"})
+        out = self.run_in(repo / "w", repo / "w")  # `..` cannot be prefixed; the paths stay as git reports them
+        self.assertIn("::warning file=w/AGENTS.md,line=1,title=R5a::", out)
+
 
 class InputRuleTest(unittest.TestCase):
     """E0 (formerly `input`): an instruction file that is not valid UTF-8."""
@@ -132,7 +219,7 @@ class InputRuleTest(unittest.TestCase):
     BAD = {"AGENTS.md": b"ok\n\xff\xfe\n"}
 
     def entry(self, rule):
-        return f'[[allowlist.entries]]\nrule = "{rule}"\npath = "AGENTS.md"\nreason = "binary for now"\nexpires = 2026-06-30\n'
+        return f'[[allowlist.entries]]\nrule = "{rule}"\npath = "AGENTS.md"\ncount = 1\nreason = "binary for now"\nexpires = 2026-06-30\n'
 
     def test_reported_as_e0(self):
         r = run(self.BAD)

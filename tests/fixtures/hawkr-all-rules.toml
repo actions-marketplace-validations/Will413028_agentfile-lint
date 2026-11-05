@@ -1,8 +1,7 @@
 # All rules configured for the public hawkr repository, at the levels their specs call for
-# (error: R2, R3a, R4 dates and issue numbers, R5 ancestor/descendant, C1; warn: R3b, R3c, R6,
-# R4 narrative words, R5 siblings). The shipped preset keeps every new rule at warn; this file is
-# what a consumer would write to raise them. Used only by the contract leg that reports on a
-# pinned checkout; limits come from hawkr-limits.toml.
+# (error: R2, R3a, R4a, R5a, C1; warn: R3b, R3c, R4b, R6; R5b stays off). The shipped preset keeps
+# every new rule at warn; this file is what a consumer would write to raise them. Used only by the
+# contract leg that reports on a pinned checkout; limits come from hawkr-limits.toml.
 extends = ["hawkr-limits.toml"]
 
 [rules.R2]
@@ -44,10 +43,13 @@ spec = "backend/docs/modules/{1}.md"
 glob = "backend/internal/modules/*/internal/*/AGENTS.md"
 spec = "backend/docs/modules/{1}.md"
 
-[rules.R4]
+[rules.R4a]
 level = "error"
 
-[rules.R5]
+[rules.R4b]
+level = "warn"
+
+[rules.R5a]
 level = "error"
 
 [rules.R6]
