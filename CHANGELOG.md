@@ -23,7 +23,6 @@ versions follow [Semantic Versioning](https://semver.org/).
 - `--no-git` walks the current directory instead of listing git-tracked files, skipping `.git`,
   `node_modules` and similar directories by a fixed list; `.gitignore` is not read. The default is
   unchanged.
-- `--path-prefix DIR` prepends a directory to every reported path.
 - Action input `working-directory` (default `.`) for a repository checked out to a subdirectory:
   `config` is relative to it and annotations point at the right file. Existing inputs are unchanged.
 

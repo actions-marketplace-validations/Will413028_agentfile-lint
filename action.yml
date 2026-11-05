@@ -9,7 +9,7 @@ inputs:
     required: false
     default: ''
   working-directory:
-    description: Directory to run in, relative to the workspace (a repository checked out to a subdirectory). The config input is relative to it; reported paths are made relative to the workspace root so annotations land on the right file.
+    description: Directory to run in, relative to the workspace (a repository checked out to a subdirectory). The config input is relative to it. Findings name paths from the git root, which is how annotations name a file.
     required: false
     default: '.'
   python-version:
@@ -31,9 +31,4 @@ runs:
       run: |
         args=(--format github)
         if [ -n "$IL_CONFIG" ]; then args+=(--config "$IL_CONFIG"); fi
-        # Findings are relative to the git root here; annotations need paths relative to the workspace.
-        if top=$(git rev-parse --show-toplevel 2>/dev/null); then
-          prefix=$(python -c 'import os, sys; r = os.path.relpath(os.path.realpath(sys.argv[1]), os.path.realpath(sys.argv[2])); print("" if r == "." or r.startswith("..") else r)' "$top" "$GITHUB_WORKSPACE")
-          if [ -n "$prefix" ]; then args+=(--path-prefix "$prefix"); fi
-        fi
         PYTHONPATH="$IL_ACTION_PATH" python -m agentfile_lint "${args[@]}"

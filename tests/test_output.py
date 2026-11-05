@@ -71,38 +71,6 @@ class TextFormatTest(unittest.TestCase):
         self.assertIn("--format", r.stderr)
 
 
-class PathPrefixTest(unittest.TestCase):
-    """`--path-prefix` (the Action's `working-directory`): every format reports workspace-relative paths."""
-
-    def test_github_annotations_get_the_prefix(self):
-        r = run(FILES, "--format", "github", "--path-prefix", "sub")
-        self.assertEqual([line.split(",")[0] for line in r.stdout.splitlines()],
-                         ["::warning file=sub/AGENTS.md", "::error file=sub/AGENTS.md", "::warning file=sub/a%2Cb/AGENTS.md"])
-        self.assertIn("::sub/AGENTS.md: warning: R1b:", r.stdout)
-
-    def test_prefix_is_normalized(self):
-        r = run(FILES, "--path-prefix", "./sub//x/")
-        self.assertTrue(r.stdout.startswith("sub/x/AGENTS.md: warning: R1b:"), r.stdout)
-
-    def test_absolute_or_escaping_prefix_is_a_usage_error(self):
-        for bad in ("/home/runner/work/r", "../up", ".."):
-            with self.subTest(bad):
-                r = run(FILES, "--path-prefix", bad)
-                self.assertEqual((r.returncode, r.stdout), (2, ""))
-                self.assertIn("--path-prefix", r.stderr)
-
-    def test_paths_outside_the_repo_keep_their_form(self):
-        from agentfile_lint.cli import _prefixed
-        self.assertEqual(_prefixed("sub", "../shared.toml"), "../shared.toml")
-        self.assertEqual(_prefixed("sub", "/etc/x.toml"), "/etc/x.toml")
-        self.assertEqual(_prefixed("sub", "a/AGENTS.md"), "sub/a/AGENTS.md")
-
-    def test_dot_and_empty_change_nothing(self):
-        plain = run(FILES).stdout
-        self.assertEqual(run(FILES, "--path-prefix", ".").stdout, plain)
-        self.assertEqual(run(FILES, "--path-prefix", "").stdout, plain)
-
-
 class JsonFormatTest(unittest.TestCase):
     def test_document_and_fields(self):
         r = run(FILES, "--format", "json")
@@ -171,13 +139,11 @@ class GithubFormatTest(unittest.TestCase):
         self.assertEqual([x.strip() for x in lines if "working-directory:" in x],
                          ["working-directory:", "working-directory: ${{ inputs.working-directory }}"])
         self.assertIn("  working-directory:", lines)  # an input, at the inputs level
-        self.assertIn('args+=(--path-prefix "$prefix")', "\n".join(lines))
 
 
 class ActionRunScriptTest(unittest.TestCase):
-    """The action's `run:` script, executed by bash the way the runner does: a repository checked out to
-    `$GITHUB_WORKSPACE/sub` gets workspace-relative annotation paths; `working-directory` pointing inside
-    the workspace's own repository adds nothing."""
+    """The action's `run:` script, executed by bash the way the runner does, inside a repository checked
+    out to `$GITHUB_WORKSPACE/sub`: paths stay relative to the git root, as GitHub reads `file=`."""
 
     @staticmethod
     def script() -> str:
@@ -194,23 +160,17 @@ class ActionRunScriptTest(unittest.TestCase):
         self.assertEqual(r.stderr, "")
         return r.stdout
 
-    def test_checkout_in_a_subdirectory_gets_the_prefix(self):
+    def test_checkout_in_a_subdirectory_reports_paths_from_the_git_root(self):
         workspace = Path(tempfile.mkdtemp(prefix="il-ws-"))
         repo = helpers.make_repo({"AGENTS.md": SHARED + "\n", "a/AGENTS.md": SHARED + "\n"})
         shutil.move(str(repo), workspace / "sub")
-        out = self.run_in(workspace, workspace / "sub")
-        self.assertIn("::warning file=sub/a/AGENTS.md,line=1,title=R5a::sub/a/AGENTS.md:1:", out)
+        out = self.run_in(workspace, workspace / "sub")  # the step's working-directory
+        self.assertIn("::warning file=a/AGENTS.md,line=1,title=R5a::a/AGENTS.md:1:", out)
 
-    def test_subdirectory_of_the_workspace_repo_adds_no_prefix(self):
+    def test_subdirectory_of_the_workspace_repo_reports_paths_from_the_git_root(self):
         repo = helpers.make_repo({"AGENTS.md": SHARED + "\n", "a/AGENTS.md": SHARED + "\n"})
         out = self.run_in(repo, repo / "a")
         self.assertIn("::warning file=a/AGENTS.md,line=1,title=R5a::", out)
-
-
-    def test_git_root_above_the_workspace_adds_no_prefix(self):
-        repo = helpers.make_repo({"AGENTS.md": SHARED + "\n", "w/AGENTS.md": SHARED + "\n"})
-        out = self.run_in(repo / "w", repo / "w")  # `..` cannot be prefixed; the paths stay as git reports them
-        self.assertIn("::warning file=w/AGENTS.md,line=1,title=R5a::", out)
 
 
 class InputRuleTest(unittest.TestCase):

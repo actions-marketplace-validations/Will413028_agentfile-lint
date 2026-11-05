@@ -272,9 +272,10 @@ Every finding goes to stdout, sorted by file, line, rule (docs/adr/0004).
   percent-encoded relative path; `region.startLine` is omitted for a whole-file finding. The action
   does not upload it (docs/adr/0006).
 
-`--path-prefix DIR` joins `DIR` in front of every reported path in every format. `action.yml` sets it
-from its `working-directory` input: the path from the workspace to the git root, when that root lies
-below the workspace, so annotations name the file as the workspace sees it.
+The action's `working-directory` input only changes where it runs. Reported paths stay relative to
+the git root: the runner passes a relative `file=` through unchanged and GitHub reads it from the
+repository root (actions/runner `ActionCommandManager.cs`, `IssueCommandExtension`), and code scanning
+reads a relative SARIF `uri` the same way.
 
 The pseudo rule `E0` reports an instruction file that is not valid UTF-8; it is always on, and only an
 allowlist entry can exempt a file; the pseudo rule `disable` reports per-line directives (Per-line

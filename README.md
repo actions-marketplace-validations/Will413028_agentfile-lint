@@ -110,7 +110,6 @@ agentfile-lint --today 2026-01-31    # replace the current date (reproducible ru
 agentfile-lint --config path.toml    # explicit config instead of .agentfile-lint.toml
 agentfile-lint --warn-as-error
 agentfile-lint --format json         # or github (workflow commands) or sarif; default text
-agentfile-lint --path-prefix sub     # prepend a directory to every reported path
 ```
 
 Other commands:

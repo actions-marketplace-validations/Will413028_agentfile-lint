@@ -86,11 +86,12 @@ Consequences:
 - Code scanning users run the CLI for SARIF and the action (or the CLI) for annotations.
 - The rule descriptors come from the rule table, so a new rule appears in SARIF with no change here.
 
-The action's `working-directory` input goes with it: findings are relative to the git root, so a
-repository checked out below the workspace needs its paths prefixed for annotations (and SARIF) to
-land on the file. `--path-prefix` does the joining; the action computes the prefix as the path from the
-workspace to the git root, so pointing `working-directory` at a subdirectory of the same repository
-adds no prefix.
+The action's `working-directory` input goes with it: a repository checked out below the workspace
+has no git repository at the workspace root, so the action must run inside the checkout. Reported
+paths are not prefixed with that directory: findings are relative to the git root, and both
+annotations (the runner passes a relative `file=` through unchanged) and code scanning read paths from
+the repository root. A live run with a `checkout/` prefix put annotations on `checkout/...`, a path
+the repository does not have.
 
 ## Scanning outside git
 

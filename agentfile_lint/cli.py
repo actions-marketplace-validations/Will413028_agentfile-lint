@@ -15,10 +15,8 @@ if sys.version_info < (3, 11):  # checked before importing anything that needs t
     raise SystemExit(2)
 
 import argparse
-import dataclasses
 import datetime
 import os
-import posixpath
 from pathlib import Path
 
 from . import __version__
@@ -46,8 +44,6 @@ def _parser() -> argparse.ArgumentParser:
                    help="output format for findings: text (default), json, github (workflow commands) or sarif (2.1.0)")
     p.add_argument("--no-git", action="store_true",
                    help="walk the current directory instead of listing git-tracked files (skips .git, node_modules and similar)")
-    p.add_argument("--path-prefix", default="",
-                   help="directory prepended to every reported path, for a repo checked out below the CI workspace root")
     return p
 
 
@@ -61,23 +57,6 @@ def _relevant(files: list[str], root: Path, cwd: Path, globs: list[str]) -> bool
         if rel == config_mod.CONFIG_NAME or discover.matches(rel, globs):
             return True
     return False
-
-
-def _path_prefix(value: str) -> str:
-    """`--path-prefix` normalized; "" for none. Absolute or `..` prefixes cannot name a workspace path."""
-    if not value:
-        return ""
-    prefix = posixpath.normpath(value.replace("\\", "/"))
-    if prefix.startswith("/") or prefix == ".." or prefix.startswith("../"):
-        raise ValueError(f"--path-prefix must be a relative path inside the workspace, got {value!r}")
-    return "" if prefix == "." else prefix
-
-
-def _prefixed(prefix: str, path: str) -> str:
-    """Only repo-relative paths move; a config shown outside the repo (`../x.toml`, `/etc/x.toml`) stays."""
-    if path.startswith("/") or path.startswith("../"):
-        return path
-    return posixpath.join(prefix, path)
 
 
 def _config_main(argv: list[str]) -> int:
@@ -128,11 +107,6 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError:
         sys.stderr.write("agentfile-lint: --today must be YYYY-MM-DD\n")
         return 2
-    try:
-        prefix = _path_prefix(args.path_prefix)
-    except ValueError as exc:
-        sys.stderr.write(f"agentfile-lint: {exc}\n")
-        return 2
     cwd = Path.cwd()
     try:
         if args.no_git:
@@ -166,8 +140,6 @@ def main(argv: list[str] | None = None) -> int:
         except discover.DiscoverError as exc:  # an unreadable directory in the --no-git walk
             sys.stderr.write(f"agentfile-lint: {exc}\n")
             return 2
-    if prefix:
-        findings = [dataclasses.replace(f, path=_prefixed(prefix, f.path)) for f in findings]
     if hasattr(sys.stdout, "reconfigure"):  # findings quote file text; a cp1252 pipe must not crash
         sys.stdout.reconfigure(encoding="utf-8")
     sys.stdout.write(FORMATS[args.format](findings))  # an irrelevant run still prints valid JSON

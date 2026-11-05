@@ -105,10 +105,6 @@ class SarifFormatTest(unittest.TestCase):
         self.assertEqual((r.returncode, log["runs"][0]["results"]), (0, []))
         self.assertEqual(problems(log, SCHEMA), [])
 
-    def test_path_prefix_applies(self):
-        r = run(FILES, "--format", "sarif", "--path-prefix", "sub/")
-        uris = [res["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] for res in json.loads(r.stdout)["runs"][0]["results"]]
-        self.assertEqual(uris, ["sub/AGENTS.md", "sub/AGENTS.md", "sub/a%2Cb/AGENTS.md"])
 
 
 if __name__ == "__main__":
