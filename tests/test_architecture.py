@@ -9,6 +9,9 @@ RULE_ALLOWED = {"context", "discover", "errors", "finding", "frontmatter", "rule
 # Vendored third-party code (PyYAML): its own imports are not checked; only frontmatter.py may use it.
 VENDORED = f"{PACKAGE}._yaml"
 VENDORED_USERS = {f"{PACKAGE}.frontmatter"}
+# The fix machinery is core too: rules may attach fixes later, so it never imports the command layer
+# or the config (docs/design.md, Fixes).
+FIX_MODULES = {"fix": {"finding", "rules", "rules._text"}, "toml_edit": {"rules", "rules._text"}}
 
 
 def import_graph(root):
@@ -95,6 +98,12 @@ def rule_violations(graph):
 class ArchitectureTest(unittest.TestCase):
     def test_package_has_no_import_cycle(self):
         self.assertIsNone(find_cycle(own_modules(import_graph(helpers.REPO))))
+
+    def test_fix_modules_import_only_core(self):
+        graph = import_graph(helpers.REPO)
+        for name, allowed in FIX_MODULES.items():
+            used = {t.removeprefix(f"{PACKAGE}.") for t in graph[f"{PACKAGE}.{name}"]}
+            self.assertLessEqual(used, allowed, name)
 
     def test_only_frontmatter_uses_the_vendored_yaml(self):
         self.assertEqual(vendored_users(import_graph(helpers.REPO)), VENDORED_USERS)

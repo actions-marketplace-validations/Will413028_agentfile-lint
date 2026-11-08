@@ -2,7 +2,7 @@
 # Use it with `extends = ["preset:strict"]`; a repository config can still override single keys.
 # These rules guess (R3b, R4a, R4b, R6) or check a convention (C1, R5b), so they are off in
 # the default preset; docs/rules.md lists their measured false-positive rates.
-# No `extends` here: a shipped preset without one extends preset:default.
+# Like every file a config extends, it is a change on top of preset:default, which applies once.
 
 [rules.R3b]
 level = "warn"

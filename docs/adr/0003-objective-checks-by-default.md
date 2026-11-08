@@ -104,3 +104,33 @@ would follow Claude Code's versions. A new warn-level check can be added later i
 
 Revisit when an issue asks for a character limit, or a CLAUDE.md over the limit that the default misses
 is reported; `.claude/rules/` and CLAUDE.local.md as file types go with it.
+
+## Amendment (0.9.0): R1e, Claude Code's per-file character limit
+
+0.9.0 widens the scope to the other files an agent reads (`SKILL.md`, hooks and `.mcp.json` checks)
+and brings the file types Claude Code loads like CLAUDE.md into the default: `**/CLAUDE.local.md` and
+`**/.claude/rules/**/*.md`. That is the decision the 0.6.0 amendment deferred, taken by the maintainer
+before its trigger occurred: no issue has asked for a character limit and no miss has been reported.
+The reason is coverage, not a reported failure: a linter for the files an agent reads should cover the
+files Claude Code documents as truncated. With those files in scope, the character limit gets its own
+id, R1e (`file-chars`), at `warn` in the default preset.
+
+- Files: the ones Claude Code's memory documentation lists as loaded on demand (read 2026-11-06):
+  CLAUDE.md and CLAUDE.local.md in a subdirectory, rules in a subdirectory's `.claude/rules/`, and
+  path-scoped rules in the root `.claude/rules/`. Which root rules are path-scoped depends on their
+  frontmatter (`paths`), so a limit entry may require a frontmatter key; files loaded at launch have
+  no limit, since the documentation gives them whole up to 4 MiB.
+- Count: code points, as the documentation's `wc -m` counts them (a CR included), of the text Claude
+  Code measures: without the frontmatter and block-level HTML comments, trimmed (Claude Code 2.1.317
+  and 2.1.319 code). Claude Code counts UTF-16 units; where the documentation and the code differ, the
+  documentation wins, as for every default's source. `excluded_blocks` does not apply, as for R1c: the
+  agent reads the blocks.
+- Level: `warn`, not `error`. The limit is 40,000 characters with a 200K context and 150,000 or
+  200,000 with a 1M context, and Claude can still read the rest with the Read tool, so 40,000 is a
+  point where text may be dropped, not one where it always is.
+- Measured: on the 22-repository sample no file R1e checks is over 13,370 characters, so R1e adds no
+  finding there; it exists for the files the 0.6.0 amendment describes (long or non-ASCII lines under
+  200 lines), which the default otherwise misses.
+
+Consequences: a counting contract that follows Claude Code's versions; a change in Claude Code's
+limit or count is a change to R1e's default (minor before 1.0, listed in the CHANGELOG).

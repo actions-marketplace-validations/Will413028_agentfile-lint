@@ -5,8 +5,6 @@ Each module exposes:
   level; a finding carries the id of the check that produced it.
 - `WHOLE_FILE` (optional): ids whose findings are about a whole file; per-line directives reject them.
 - `SHARED` (optional): (group, keys), the `[shared.<group>]` table its ids share.
-- `SECTION` (optional): the name of a top-level table the module owns (`[skills]`); `validate` gets it
-  in place of `shared`, and `section_json(params)` gives its effective value for `config --format json`.
 - `FAMILY` (optional, default "instruction"): the file family `check` runs on, one of `FAMILIES`.
   Instruction files are `[discover] globs`; every other family is `[discover] <family>_globs`
   (docs/design.md, File families).
@@ -47,8 +45,6 @@ FAMILY_FILES = {
 FAMILY = {module: getattr(module, "FAMILY", INSTRUCTION) for module in MODULES}
 if not set(FAMILY.values()) <= set(FAMILIES):
     raise RuntimeError("a rule module names a file family that FAMILIES does not list")
-# Top-level table -> the module that owns it.
-SECTIONS = {module.SECTION: module for module in MODULES if hasattr(module, "SECTION")}
 
 # `[shared.<group>]` -> its allowed keys.
 SHARED = {module.SHARED[0]: set(module.SHARED[1]) for module in MODULES if hasattr(module, "SHARED")}

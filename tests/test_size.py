@@ -100,9 +100,17 @@ class SizeLimitsTest(unittest.TestCase):
         ]})
         self.assertEqual(rules["R1c"], {"level": "error", "limits": [{"glob": "**/AGENTS.md", "max_bytes": 32768}]})
         self.assertEqual(rules["R1d"], {"level": "off"})
+        self.assertEqual(rules["R1e"], {"level": "warn", "limits": [
+            {"glob": ".claude/CLAUDE.md"},
+            {"glob": ".claude/rules/**/*.md", "max_chars": 40000, "frontmatter_key": "paths"},
+            {"glob": ".claude/rules/**/*.md"},
+            {"glob": "*/**/CLAUDE.md", "max_chars": 40000},
+            {"glob": "*/**/CLAUDE.local.md", "max_chars": 40000},
+            {"glob": "*/**/.claude/rules/**/*.md", "max_chars": 40000},
+        ]})
         self.assertEqual(_preset()["shared"]["size"], {"excluded_blocks": []})
 
-    def test_default_preset_covers_every_discovered_file(self):
+    def test_default_r1b_covers_agents_and_claude_md(self):
         files = {"AGENTS.md": "x\n" * 201, "CLAUDE.md": "x\n" * 201, "sub/CLAUDE.md": "x\n" * 201, "a/b/AGENTS.md": "x\n" * 201}
         r = helpers.run_new(helpers.make_repo(files))
         self.assertEqual((r.returncode, r.stderr), (0, ""))  # 200 lines is guidance, not a hard limit: warn
@@ -212,6 +220,123 @@ def kb(n):
 
 PATH_32K = '[[rules.R1c.limits]]\nglob = "**/AGENTS.md"\nmax_bytes = 32768\n'
 NO_LINES = "[rules.R1b]\nlimits = []\n"
+
+
+class CharLimitTest(unittest.TestCase):
+    """R1e (`file-chars`): Claude Code's per-file character limit on the files it loads on demand
+    (https://code.claude.com/docs/en/memory, "Claude ignores the end of my subdirectory CLAUDE.md"):
+    characters as `wc -m` counts them, after the frontmatter and block-level HTML comments are removed
+    and surrounding whitespace is trimmed; `excluded_blocks` does not apply."""
+
+    SUB = "sub/CLAUDE.md"
+
+    def r1e(self, files, toml=""):
+        r = run(files, toml)
+        self.assertEqual(r.stderr, "")
+        return r, ids(r, "R1e")
+
+    def test_boundary_at_40000(self):
+        for n, reported in ((39_999, False), (40_000, False), (40_001, True)):
+            r, found = self.r1e({self.SUB: "x" * n + "\n"})
+            self.assertEqual(r.returncode, 0, n)  # a warning
+            self.assertEqual(found, [f"{self.SUB}: warning: R1e: file is {n} characters, limit 40000"] if reported else [], n)
+
+    def test_counts_characters_not_bytes(self):
+        _, found = self.r1e({self.SUB: "中" * 40_000})  # 120000 bytes, 40000 characters
+        self.assertEqual(found, [])
+        _, found = self.r1e({self.SUB: "中" * 39_999 + "😀😀"})  # one code point each, as `wc -m` counts
+        self.assertEqual(found, [f"{self.SUB}: warning: R1e: file is 40001 characters, limit 40000"])
+
+    def test_a_carriage_return_is_a_character(self):
+        # 39998 + CR + LF + 1: `wc -m` counts 40001; the same text with LF only is 40000.
+        _, found = self.r1e({self.SUB: "x" * 39_998 + "\r\n" + "y"})
+        self.assertEqual(found, [f"{self.SUB}: warning: R1e: file is 40001 characters, limit 40000"])
+        self.assertEqual(self.r1e({self.SUB: "x" * 39_998 + "\n" + "y"})[1], [])
+
+    def test_surrounding_whitespace_is_trimmed(self):
+        self.assertEqual(self.r1e({self.SUB: "﻿\n\n  \t" + "x" * 40_000 + "\n\n \r\n"})[1], [])
+
+    def test_frontmatter_is_not_counted(self):
+        head = "---\npaths:\n  - \"src/**\"\n---\n"
+        self.assertEqual(self.r1e({self.SUB: head + "x" * 40_000})[1], [])
+        self.assertEqual(self.r1e({self.SUB: head.replace("\n", "\r\n") + "x" * 40_000})[1], [])
+        _, found = self.r1e({self.SUB: head + "x" * 40_001})
+        self.assertEqual(found, [f"{self.SUB}: warning: R1e: file is 40001 characters, limit 40000"])
+        # An unterminated block is not frontmatter: every character counts.
+        _, found = self.r1e({self.SUB: "---\n" + "x" * 39_997})
+        self.assertEqual(found, [f"{self.SUB}: warning: R1e: file is 40001 characters, limit 40000"])
+
+    def test_block_html_comments_are_not_counted(self):
+        comment = "<!-- " + "c" * 500 + "\nmore -->\n\n\n"
+        self.assertEqual(self.r1e({self.SUB: "x" * 20_000 + "\n\n" + comment + "x" * 19_998})[1], [])
+        self.assertEqual(self.r1e({self.SUB: "   " + comment + "x" * 40_000})[1], [])  # up to 3 spaces of indent
+
+    def test_comments_that_stay(self):
+        # Hand-counted (after the trim): text after a comment on its line stays, the comment goes; an
+        # inline comment, one in a fenced code block, an indented one (code) and an unterminated one count.
+        cases = {
+            "<!-- c --> kept\n" + "x" * 39_996: 40_001,       # "kept\n" 5 + 39996
+            "x <!-- c -->\n" + "x" * 39_988: 40_001,          # inline in a paragraph: 13 + 39988
+            "```\n<!-- c -->\n```\n" + "x" * 39_982: 40_001,  # in a fence: 19 + 39982
+            "    <!-- c -->\n" + "x" * 39_990: 40_001,        # indented code, leading spaces trimmed: 11 + 39990
+            "<!-- " + "x" * 39_996: 40_001,                    # never closed: 5 + 39996
+        }
+        for text, n in cases.items():
+            self.assertEqual(self.r1e({self.SUB: text})[1], [f"{self.SUB}: warning: R1e: file is {n} characters, limit 40000"], text[:16])
+        # A comment block may interrupt a paragraph: "x\n" stays, the comment line goes.
+        self.assertEqual(self.r1e({self.SUB: "x\n<!-- c -->\n" + "y" * 39_998})[1], [])
+
+    def test_excluded_blocks_do_not_apply(self):
+        toml = '[shared.size]\nexcluded_blocks = [{ begin = "BEGIN", end = "END" }]\n'
+        _, found = self.r1e({self.SUB: "BEGIN\n" + "x" * 40_000 + "\nEND"}, toml)
+        self.assertEqual(found, [f"{self.SUB}: warning: R1e: file is 40010 characters, limit 40000"])
+
+    def test_which_files_the_default_checks(self):
+        big = "x" * 40_001
+        scoped = "---\npaths: [\"src/**\"]\n---\n" + big
+        files = {
+            "CLAUDE.md": big, ".claude/CLAUDE.md": big, "CLAUDE.local.md": big,      # load at launch
+            ".claude/rules/always.md": big,                                           # no `paths`: at launch
+            ".claude/rules/broken.md": "---\npaths: [\n---\n" + big,                  # bad YAML: as if no `paths`
+            ".claude/rules/x/CLAUDE.md": big,                                         # a root rule, not a subdirectory CLAUDE.md
+            ".claude/rules/y/CLAUDE.md": scoped,
+            "AGENTS.md": "ok\n", "sub/AGENTS.md": "ok\n",
+            "sub/CLAUDE.md": big, "a/b/CLAUDE.local.md": big,                         # subdirectories: on demand
+            "sub/.claude/rules/x.md": big, ".claude/rules/deep/scoped.md": scoped,    # on demand
+        }
+        r, found = self.r1e(files)
+        self.assertEqual(r.returncode, 0)
+        self.assertEqual(sorted(line.split(":")[0] for line in found),
+                         [".claude/rules/deep/scoped.md", ".claude/rules/y/CLAUDE.md", "a/b/CLAUDE.local.md",
+                          "sub/.claude/rules/x.md", "sub/CLAUDE.md"])
+
+    def test_limits_are_configurable(self):
+        toml = limits("R1e", {"glob": "sub/**", "max_chars": 150_000}, {"glob": "**", "max_chars": 10})
+        _, found = self.r1e({self.SUB: "x" * 40_001, "CLAUDE.md": "x" * 11}, toml)
+        self.assertEqual(found, ["CLAUDE.md: warning: R1e: file is 11 characters, limit 10"])
+        # An entry without max_chars sets no limit, and later entries are not tried (first match wins).
+        toml = limits("R1e", {"glob": "CLAUDE.md"}, {"glob": "**", "max_chars": 10})
+        self.assertEqual(self.r1e({"CLAUDE.md": "x" * 11}, toml)[1], [])
+        # frontmatter_key: the entry applies only when the frontmatter has that top-level key.
+        toml = limits("R1e", {"glob": "**", "max_chars": 10, "frontmatter_key": "owner"})
+        self.assertEqual(self.r1e({"CLAUDE.md": "x" * 11}, toml)[1], [])
+        _, found = self.r1e({"CLAUDE.md": "---\nowner: me\n---\n" + "x" * 11}, toml)
+        self.assertEqual(found, ["CLAUDE.md: warning: R1e: file is 11 characters, limit 10"])
+
+    def test_level_and_validation(self):
+        r, found = self.r1e({self.SUB: "x" * 40_001}, level("R1e"))
+        self.assertEqual((r.returncode, len(found)), (1, 1))
+        self.assertEqual(self.r1e({self.SUB: "x" * 40_001}, level("R1e", "off"))[1], [])
+        self.assertEqual(self.r1e({self.SUB: "x" * 40_001}, '[rules.file-chars]\nlevel = "off"\n')[1], [])
+        for bad in (limits("R1e", {"glob": "**", "max_bytes": 1}), limits("R1e", {"max_chars": 1}),
+                    limits("R1e", {"glob": "**", "max_chars": "1"}), limits("R1e", {"glob": "**", "frontmatter_key": 1}),
+                    '[rules.R1e]\nmax_chars = 10\n'):
+            self.assertEqual(run({"AGENTS.md": "ok\n"}, bad).returncode, 2, bad)
+
+    def test_a_directive_cannot_name_it(self):
+        r = run({self.SUB: "<!-- agentfile-lint-disable-next-line R1e -- too long -->\n" + "x" * 10}, "")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("R1e is a whole-file rule", r.stdout)
 
 
 class PathLimitsTest(unittest.TestCase):

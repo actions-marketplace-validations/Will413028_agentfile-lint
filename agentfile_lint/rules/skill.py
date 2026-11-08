@@ -3,8 +3,8 @@
 Two readers treat the same file differently. Claude Code ignores fields it does not know, takes a
 `name` that differs from the directory and loads a skill whose YAML does not parse with no fields set.
 claude.ai upload, the Skills API and the Agent Skills specification reject a key outside the
-specification's six. Each id belongs to the readers it protects (`READERS`); `[skills] targets` names
-the readers a repository writes for, and an id none of them reads never runs, whatever its level.
+specification's six. Each id protects one reader or both (docs/rules.md); the default preset turns
+on the Claude Code ids, and `preset:agentskills` adds the others. Which ids run is only their level.
 
 Runs on the skill file family (`[discover] skill_globs`), never on instruction files. Frontmatter
 scalars are read as their text (`frontmatter.parse(strings=True)`): YAML 1.1 type resolution would
@@ -18,21 +18,16 @@ import unicodedata
 from typing import Any
 
 from .. import frontmatter
-from ..errors import ConfigError, check_keys, expect_str_list, levels_only
+from ..errors import check_keys, expect_int, levels_only
 from ..finding import Finding
 from ._text import split_lines
 
 FAMILY = "skill"
-SECTION = "skills"   # the top-level `[skills]` table this module validates
-
-CLAUDE_CODE = "claude-code"
-AGENTSKILLS = "agentskills"
-TARGETS = (AGENTSKILLS, CLAUDE_CODE)
 
 CHECKS = (
     ("S1", "skill-yaml", "SKILL.md frontmatter is valid YAML and a mapping"),
     ("S2", "skill-lines", "SKILL.md has fewer than 500 lines"),
-    ("S3", "skill-listing-chars", "description plus when_to_use fit Claude Code's 1536-character skill listing"),
+    ("S3", "skill-listing-chars", "description plus when_to_use fit Claude Code's skill listing (max_chars)"),
     ("S4", "skill-metadata-map", "metadata is a map"),
     ("S5", "skill-frontmatter", "SKILL.md starts with YAML frontmatter"),
     ("S6", "skill-name-length", "name is a string of 1 to 64 characters"),
@@ -43,40 +38,28 @@ CHECKS = (
     ("S11", "skill-keys", "only the specification's six frontmatter keys"),
     ("S12", "skill-name-refused", "name and directory name hold no character Claude Code refuses"),
 )
-READERS = {
-    "S1": (CLAUDE_CODE, AGENTSKILLS), "S2": (CLAUDE_CODE, AGENTSKILLS),
-    "S3": (CLAUDE_CODE,), "S4": (CLAUDE_CODE,), "S12": (CLAUDE_CODE,),
-    **{rule_id: (AGENTSKILLS,) for rule_id in ("S5", "S6", "S7", "S8", "S9", "S10", "S11")},
-}
 WHOLE_FILE = ("S2", "S5")   # S12 on a directory name is line 0 too; S ids take no directive anyway
 
 NON_STRING_KEY = "a mapping key is not a string"
 MAX_LINES = 499         # "Keep SKILL.md under 500 lines"
-MAX_LISTING = 1536      # Claude Code's default `skillListingMaxDescChars`
 MAX_NAME = 64
 MAX_DESCRIPTION = 1024
 MAX_COMPATIBILITY = 500
 SPEC_KEYS = ("allowed-tools", "compatibility", "description", "license", "metadata", "name")
 
 
-def validate(section: Any, tables: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
-    section = {} if section is None else section
-    check_keys(section, {"targets"}, SECTION)
-    targets = expect_str_list(section.get("targets"), f"{SECTION}.targets", allow_empty=True)
-    for i, target in enumerate(targets):
-        if target not in TARGETS:
-            raise ConfigError(f"{SECTION}.targets[{i}]: unknown reader {target!r} (expected: {', '.join(TARGETS)})")
-    return {"targets": list(dict.fromkeys(targets))}, levels_only(tables)
-
-
-def section_json(params: dict[str, Any]) -> dict[str, Any]:
-    """The effective `[skills]` table, for `config --format json`."""
-    return {"targets": params["targets"]}
+def validate(shared: Any, tables: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    s3 = tables["S3"]
+    check_keys(s3, {"level", "max_chars"}, "rules.S3")
+    # The preset sets 1536, Claude Code's default `skillListingMaxDescChars`.
+    max_listing = expect_int(s3.get("max_chars"), "rules.S3.max_chars")
+    effective = levels_only({rule_id: table for rule_id, table in tables.items() if rule_id != "S3"})
+    effective["S3"] = {"max_chars": max_listing}
+    return {"max_listing": max_listing}, effective
 
 
 def check(path: str, text: str, params: dict[str, Any], levels: dict[str, str]) -> list[Finding]:
-    targets = set(params["targets"])
-    return [f for f in _check(path, text) if targets & set(READERS[f.rule])]
+    return _check(path, text, params["max_listing"])
 
 
 def _refused(name: str) -> str | None:
@@ -97,7 +80,7 @@ def _refused(name: str) -> str | None:
     return None
 
 
-def _check(path: str, text: str) -> list[Finding]:
+def _check(path: str, text: str, max_listing: int) -> list[Finding]:
     found: list[Finding] = []
     directory_raw = posixpath.basename(posixpath.dirname(path))
     why = _refused(directory_raw) if directory_raw else None
@@ -128,10 +111,10 @@ def _check(path: str, text: str) -> list[Finding]:
     line = lambda key: fm.keys.get(key, 1)  # noqa: E731
 
     listing = "".join(v for v in (data.get("description"), data.get("when_to_use")) if isinstance(v, str))
-    if len(listing) > MAX_LISTING:
+    if len(listing) > max_listing:
         key = "description" if "description" in data else "when_to_use"
         found.append(Finding(path, line(key), "S3", f"description and when_to_use are {len(listing)} characters; "
-                             f"Claude Code cuts each skill's listing text at {MAX_LISTING}"))
+                             f"Claude Code cuts each skill's listing text at {max_listing}"))
     if "metadata" in data and not isinstance(data["metadata"], dict):
         found.append(Finding(path, line("metadata"), "S4", "metadata is not a map; Claude Code drops it"))
 

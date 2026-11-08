@@ -9,7 +9,9 @@ import re
 import subprocess
 from pathlib import Path
 
-LOCAL_SUFFIX = ".local.md"  # untracked local instruction files are never analyzed
+# Personal, usually untracked instruction files: discovered only through a glob that names them
+# (`**/CLAUDE.local.md` in the default), never through a wider one such as `**/*.md`.
+LOCAL_SUFFIX = ".local.md"
 # Directories a `--no-git` walk never enters, at any depth: version-control data and dependency or
 # tool caches. A fixed list, not `.gitignore` (docs/adr/0006).
 SKIP_DIRS = frozenset({
@@ -50,9 +52,15 @@ def glob_to_regex(glob: str, capture: bool = False) -> re.Pattern[str]:
 
 
 def matches(path: str, globs: list[str]) -> bool:
-    if path.endswith(LOCAL_SUFFIX):
-        return False
+    """A plain glob match (overrides, exclusions); discovery uses `discovered`."""
     return any(glob_to_regex(g).match(path) for g in globs)
+
+
+def discovered(path: str, globs: list[str]) -> bool:
+    """Whether discovery takes `path`: a glob matches it, and a `.local.md` file only through a glob
+    that itself ends in `.local.md`."""
+    local = path.endswith(LOCAL_SUFFIX)
+    return any((not local or g.endswith(LOCAL_SUFFIX)) and glob_to_regex(g).match(path) for g in globs)
 
 
 def repo_root(cwd: Path) -> Path:
@@ -96,7 +104,7 @@ def list_files(root: Path, use_git: bool = True) -> list[str]:
 def matching_files(root: Path, globs: list[str], files: list[str]) -> list[str]:
     """Files from `files` (`list_files`) matching `globs` that exist in the working tree (staged
     deletions skipped)."""
-    return [p for p in files if matches(p, globs) and (root / p).is_file()]
+    return [p for p in files if discovered(p, globs) and (root / p).is_file()]
 
 
 def aliases(root: Path, paths: list[str]) -> dict[str, str]:

@@ -6,7 +6,11 @@ extends = []
 # property of one repository's layout. Overrides belong in the repository's own config (docs/design.md).
 
 [discover]
-globs = ["AGENTS.md", "**/AGENTS.md", "CLAUDE.md", "**/CLAUDE.md"]
+# Claude Code also loads CLAUDE.local.md beside each CLAUDE.md and every .md under .claude/rules/
+# (https://code.claude.com/docs/en/memory). A `.local.md` file is found only through a glob that names
+# it, such as `**/CLAUDE.local.md`; it is usually untracked, so only `--no-git` finds it. A rules file
+# named `*.local.md` needs `extend_globs = ["**/.claude/rules/**/*.local.md"]`.
+globs = ["AGENTS.md", "**/AGENTS.md", "CLAUDE.md", "**/CLAUDE.md", "**/CLAUDE.local.md", "**/.claude/rules/**/*.md"]
 # SKILL.md files are a family of their own: only the S rules run on them, and R and C rules never do.
 skill_globs = ["**/SKILL.md"]
 # Claude Code settings files (H rules): read from the directory a session starts in, at any depth.
@@ -24,14 +28,14 @@ warn_days = 14    # warn when an entry expires within this many days
 [shared.size]
 excluded_blocks = []   # list of { begin = "...", end = "..." }
 
-# Size is four ids (R1a to R1d), each with one level. The default uses only limits with an external source.
+# Size is five ids (R1a to R1e), each with one level. The default uses only limits with an external source.
 # `limits` lists replace as a whole: a repository config that sets one replaces the preset's list.
 #
 # R1a per-file bytes and R1b per-file lines: by path glob, the first matching entry of that id's
 # `limits` applies; a file that matches no entry has no limit. Claude Code asks for fewer than 200
 # lines per CLAUDE.md file (https://code.claude.com/docs/en/memory) and reads AGENTS.md when no
 # CLAUDE.md exists; guidance, not a point where text is dropped, so R1b is a warning. Claude Code's
-# per-file character limit is not checked here (docs/rules.md, R1b).
+# per-file character limit is R1e.
 [rules.R1a]
 level = "error"
 limits = []   # list of { glob = "...", max_bytes = N }
@@ -63,6 +67,41 @@ max_bytes = 32768
 [rules.R1d]
 level = "off"
 # max_chars = 500
+
+# R1e characters per file, by path glob (first match wins): an entry without `max_chars` sets no limit,
+# and one with `frontmatter_key` applies only to files whose frontmatter has that top-level key.
+# Counted as `wc -m` counts, after removing the frontmatter and block-level HTML comments and trimming
+# whitespace; `excluded_blocks` does not apply. Claude Code gives only the start of a file it loads on
+# demand when the file is over 40,000 characters with a 200K context (150,000 or 200,000 with 1M):
+# CLAUDE.md and CLAUDE.local.md in a subdirectory, rules in a subdirectory's .claude/rules/, and
+# path-scoped rules (`paths` frontmatter) in the root .claude/rules/
+# (https://code.claude.com/docs/en/memory, "Claude ignores the end of my subdirectory CLAUDE.md").
+# Files loaded at launch are given whole. The limit depends on the context window, so a warning.
+[rules.R1e]
+level = "warn"
+
+[[rules.R1e.limits]]
+glob = ".claude/CLAUDE.md"   # the project CLAUDE.md, loaded at launch: no limit
+
+[[rules.R1e.limits]]
+glob = ".claude/rules/**/*.md"
+max_chars = 40000
+frontmatter_key = "paths"   # a path-scoped root rule
+
+[[rules.R1e.limits]]
+glob = ".claude/rules/**/*.md"   # any other root rule, loaded at launch: no limit
+
+[[rules.R1e.limits]]
+glob = "*/**/CLAUDE.md"
+max_chars = 40000
+
+[[rules.R1e.limits]]
+glob = "*/**/CLAUDE.local.md"
+max_chars = 40000
+
+[[rules.R1e.limits]]
+glob = "*/**/.claude/rules/**/*.md"
+max_chars = 40000
 
 # ---------------------------------------------------------------------------------------------
 # Rules other than R1a and R1c enter at `warn` (see CHANGELOG, "Graduated"). A repository raises a rule
@@ -184,16 +223,13 @@ mode = "import-only"
 import_line = "@AGENTS.md"
 
 # ---------------------------------------------------------------------------------------------
-# S1 to S12: SKILL.md (docs/rules.md, "S1 to S12 SKILL.md"; docs/adr/0007). Each id protects one or
-# both readers; `targets` names the readers this repository writes for, and an id none of them reads
-# does not run, whatever its level or an override says.
-#   claude-code: Claude Code (S1 to S4, S12)
-#   agentskills: claude.ai upload, the Skills API and the Agent Skills specification (S1, S2, S5 to S11)
-# A repository that uploads its skills sets `targets = ["claude-code", "agentskills"]`.
+# S1 to S12: SKILL.md (docs/rules.md, "S1 to S12 SKILL.md"; docs/adr/0007). Two readers read these
+# files differently; each id protects one or both:
+#   Claude Code: S1 to S4, S12 (on here)
+#   claude.ai upload, the Skills API and the Agent Skills specification: S1, S2, S5 to S11
+# S5 to S11 are off: Claude Code accepts what they report. A repository that uploads its skills adds
+# `extends = ["preset:agentskills"]`, or turns single ids on with their level.
 # ---------------------------------------------------------------------------------------------
-[skills]
-targets = ["claude-code"]
-
 [rules.S1]
 level = "warn"
 
@@ -202,30 +238,31 @@ level = "warn"
 
 [rules.S3]
 level = "warn"
+max_chars = 1536   # Claude Code's default `skillListingMaxDescChars`; follow yours if you changed it
 
 [rules.S4]
 level = "warn"
 
 [rules.S5]
-level = "warn"
+level = "off"
 
 [rules.S6]
-level = "warn"
+level = "off"
 
 [rules.S7]
-level = "warn"
+level = "off"
 
 [rules.S8]
-level = "warn"
+level = "off"
 
 [rules.S9]
-level = "warn"
+level = "off"
 
 [rules.S10]
-level = "warn"
+level = "off"
 
 [rules.S11]
-level = "warn"
+level = "off"
 
 [rules.S12]
 level = "warn"

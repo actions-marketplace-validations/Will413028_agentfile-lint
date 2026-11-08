@@ -105,6 +105,20 @@ class SarifFormatTest(unittest.TestCase):
         self.assertEqual((r.returncode, log["runs"][0]["results"]), (0, []))
         self.assertEqual(problems(log, SCHEMA), [])
 
+    def test_fixes_are_valid_against_the_schema(self):
+        directive = "<!-- agentfile-lint-disable-next-line R5a, R1d -- copied -->\n"
+        dup = "Run make check before every push to the remote.\n"
+        files = {"AGENTS.md": dup, "sub/AGENTS.md": directive + dup + "# T\n" + directive.replace("R5a, ", "") + "ok\n"}
+        log = json.loads(run(files, "--format", "sarif").stdout)
+        self.assertEqual(sum(len(r.get("fixes", [])) for r in log["runs"][0]["results"]), 2)
+        self.assertEqual(problems(log, SCHEMA), [])
+
+    def test_validator_rejects_a_fix_without_artifact_changes(self):
+        log = json.loads(run({"AGENTS.md": "<!-- agentfile-lint-disable-next-line R1d -- x -->\nok\n"},
+                             "--format", "sarif").stdout)
+        (result,) = log["runs"][0]["results"]
+        del result["fixes"][0]["artifactChanges"]
+        self.assertTrue(any("missing artifactChanges" in p for p in problems(log, SCHEMA)))
 
 
 if __name__ == "__main__":

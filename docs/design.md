@@ -23,7 +23,8 @@ locally and in CI does.
 
 - No LLM in the gate (non-deterministic, paid, and the checked text is untrusted input).
 - Not a Markdown style linter; it knows instruction-file semantics (tiers, budgets), not prose style.
-- Untracked local instruction files (`*.local.md`) are out of scope; CI cannot see them.
+- Local instruction files (`*.local.md`) are found only through a glob that names them; CI usually
+  cannot see them, since they are rarely tracked (File discovery).
 - No distribution channel the runner depends on. It ships as a git repository (pre-commit hook,
   composite action), a PyPI package (`uvx agentfile-lint`) and a pinned vendored copy for restricted
   environments (see Vendored copy); consumers pin a version or a full commit SHA.
@@ -33,13 +34,22 @@ locally and in CI does.
 ```
 preset (shipped) <- repo config (.agentfile-lint.toml, `extends`) -> effective config
 effective config + git ls-files or the --no-git walk (full set) -> rules -> findings -> overrides -> per-line directives -> allowlist -> output + exit code
+with --fix or --diff: findings with fixes -> edits in memory -> the same run on the edited texts (safety net 2) -> written (--fix) or printed (--diff)
 ```
+
+The checker only reads files; `--fix` is the one way it writes to a checked repository (Fixes), and
+the `vendor` subcommand writes its copy.
 
 - Rules are data: a rule module reads parameters, and repo-specific behaviour is never a
   branch in code. Differences between repositories are config values.
-- One rule id is one check with one level. A module may report several ids (R1a to R1d, R4a and R4b,
+- One rule id is one check with one level. A module may report several ids (R1a to R1e, R4a and R4b,
   R5a and R5b) from one computation; parameters those ids share live in `[shared.<group>]`, the rest
   in `[rules.<id>]` (docs/adr/0005).
+- Layers: `preset:default` is applied once, first, under the file the run loads (or alone when there
+  is none). Every other file, a shipped preset such as `preset:strict` or a shared file named in
+  `extends`, is a change on top: it holds only the keys it sets, and naming `preset:default` in it
+  has no further effect. A file's `extends` entries apply in order, then the file itself, so a later
+  entry wins over an earlier one only on the keys it sets (docs/adr/0008).
 - Merge: tables merge key by key (the child wins); every other value, lists included, is replaced.
   Two lists concatenate along the `extends` chain instead, parents first: `[[overrides]]`, because
   replacing them would silently drop the overrides of the config a file extends (a child removes an
@@ -54,8 +64,11 @@ effective config + git ls-files or the --no-git walk (full set) -> rules -> find
 ## File discovery
 
 Files are `git ls-files` entries matching `discover.globs` (default `AGENTS.md`, `**/AGENTS.md`,
-`CLAUDE.md`, `**/CLAUDE.md`) or `discover.extend_globs` (default none), never a file ending in `.local.md`, skipping files deleted in the
-working tree. Two discovered paths in the same directory that are the same file (for example
+`CLAUDE.md`, `**/CLAUDE.md`, `**/CLAUDE.local.md`, `**/.claude/rules/**/*.md`) or `discover.extend_globs`
+(default none), skipping files deleted in the working tree. A file ending in `.local.md` is personal
+and usually untracked: only a glob that itself ends in `.local.md` finds it (`**/CLAUDE.local.md`, which
+Claude Code loads beside CLAUDE.md), never a wider one such as `**/*.md`. Override paths, R5 exclusions
+and the other path filters are plain globs and match it like any file. Two discovered paths in the same directory that are the same file (for example
 `CLAUDE.md -> AGENTS.md`) are one file under two names, each loaded by a different agent: only the
 non-symlink path is analyzed (the first in sort order when all are symlinks), so no rule reports the
 same text twice. The same file in another
@@ -75,7 +88,7 @@ Each rule module checks one family of files, and each family has its own glob li
 
 | Family | Globs | Default | Rules |
 |---|---|---|---|
-| instruction | `discover.globs`, `discover.extend_globs` | `AGENTS.md`, `CLAUDE.md` at any depth | R1a to R6, C1 |
+| instruction | `discover.globs`, `discover.extend_globs` | `AGENTS.md`, `CLAUDE.md`, `CLAUDE.local.md` at any depth, `.md` under `.claude/rules/` | R1a to R6, C1 |
 | skill | `discover.skill_globs`, `discover.extend_skill_globs` | `**/SKILL.md` | S1 to S12 |
 | hooks | `discover.hooks_globs`, `discover.extend_hooks_globs` | `**/.claude/settings.json`, `**/.claude/settings.local.json` | H1 to H6 |
 | mcp | `discover.mcp_globs`, `discover.extend_mcp_globs` | `.mcp.json` (root only) | M1 to M4 |
@@ -89,10 +102,9 @@ text in a `SKILL.md` body is skill content, and its frontmatter cannot hold an H
 has no comments, so S, H and M ids cannot be named in a directive (an allowlist entry or an override
 covers them). An empty glob list turns its family off, except `globs`, which must stay non-empty.
 
-Which S ids run also depends on `[skills] targets` (default `["claude-code"]`): each S id belongs to
-the readers it protects, and an id that no listed reader reads does not run, whatever its level or an
-override says (docs/rules.md, S1 to S12; docs/adr/0007). Unknown targets fail the configuration; an
-empty `targets` or `skill_globs` turns the skill family off (`globs` must stay non-empty).
+Which S ids run is their level only. The default preset turns on the ids for Claude Code;
+`preset:agentskills` adds the ids for claude.ai upload and the Skills API (docs/rules.md, S1 to S12;
+docs/adr/0007). An empty `skill_globs` turns the skill family off (`globs` must stay non-empty).
 
 File names given on the command line are not used to narrow the analysis: cross-file rules and the
 allowlist "no longer needed" check need the whole set, and a partial view would make them pass locally
@@ -105,11 +117,11 @@ so a hook or workflow must not filter by instruction-file paths. The pre-commit 
 commit and push; cross-file rules read the whole tracked set. Add a weekly `schedule` in CI so allowlist
 expiry warnings appear without commits.
 
-## Rules R1a to R1d: size
+## Rules R1a to R1e: size
 
-Size is four rules, each with one level (docs/adr/0005): `R1a` per-file bytes (`file-bytes`), `R1b`
-per-file lines (`file-lines`), `R1c` combined bytes on a path (`path-bytes`) and `R1d` line length
-(`line-length`). They share `[shared.size]`; each `[rules.<id>]` holds its level and its own keys.
+Size is five rules, each with one level (docs/adr/0005): `R1a` per-file bytes (`file-bytes`), `R1b`
+per-file lines (`file-lines`), `R1c` combined bytes on a path (`path-bytes`), `R1d` line length
+(`line-length`) and `R1e` per-file characters (`file-chars`). They share `[shared.size]`; each `[rules.<id>]` holds its level and its own keys.
 
 - `R1a.limits` (`{glob, max_bytes}`) and `R1b.limits` (`{glob, max_lines}`): ordered lists; the first
   entry whose glob matches the path applies, and a file that matches no entry has no limit. Globs use
@@ -123,26 +135,32 @@ per-file lines (`file-lines`), `R1c` combined bytes on a path (`path-bytes`) and
   per directory (`**/AGENTS.md`); Codex also loads `AGENTS.override.md` or fallback names instead of
   AGENTS.md, which the default does not model (revisit when an issue reports such a repository).
 - `R1d.max_chars`: per-line limit in characters, required when R1d is not `off`.
+- `R1e.limits` (`{glob, max_chars, frontmatter_key}`, `glob` required): ordered like R1a, first match
+  wins. An entry without `max_chars` sets no limit for the files it matches; an entry with
+  `frontmatter_key` matches only a file whose frontmatter parses (`frontmatter.py`) and has that
+  top-level key, so a later entry may apply instead. The count is Claude Code's for its per-file limit:
+  code points of the text on disk (a CR counts) without the frontmatter and block-level HTML comments,
+  trimmed with JavaScript's whitespace set (docs/rules.md, R1e).
 - Default preset: only limits an agent's documentation states. R1c at `error`: AGENTS.md files on one
   path that total over 32768 bytes; Codex reads AGENTS.md from the root down to the working directory
   and stops adding files at 32 KiB in total (`project_doc_max_bytes`,
   https://learn.chatgpt.com/docs/agent-configuration/agents-md). R1b at `warn`: `**/AGENTS.md` and
   `**/CLAUDE.md` over 200 lines; Claude Code asks for fewer than 200 lines per CLAUDE.md file and reads
-  AGENTS.md when there is no CLAUDE.md (https://code.claude.com/docs/en/memory). It also cuts a file
-  it loads on demand (a subdirectory CLAUDE.md, CLAUDE.local.md, path-scoped rules) to its first 40,000
-  characters with a 200K context and warns about large files at startup; the default does not check
-  characters, so a CLAUDE.md under 200 lines with long or non-ASCII lines passes (docs/rules.md, R1b).
-  R1a at `error` with no limits, R1d `off`. Every default error must point to such a hard limit
+  AGENTS.md when there is no CLAUDE.md (https://code.claude.com/docs/en/memory). R1e at `warn`: a
+  file Claude Code loads on demand (CLAUDE.md and CLAUDE.local.md in a subdirectory, a subdirectory's
+  `.claude/rules/`, path-scoped rules in the root `.claude/rules/`) over 40,000 characters, where it
+  gives Claude only the start of the file with a 200K context; the limit grows with a 1M context, so
+  a warning. R1a at `error` with no limits, R1d `off`. Every default error must point to such a hard limit
   (docs/adr/0003).
 - Old ids, aliases and keys (`R1`, `size`, `bytes_level`, `lines_level`, `path_limits`,
   `max_line_chars`, the old `max_bytes` tier table) fail the configuration with a message naming what
   replaces them.
 - `[shared.size] excluded_blocks`: marker pairs; the text from a begin marker through the end marker
   (and one trailing LF, CRLF or CR) does not count toward R1a, R1b or R1d (a line wholly inside a block
-  is never reported). It does not apply to R1c. The split is deliberate: a single-file limit is the
+  is never reported). It does not apply to R1c or R1e. The split is deliberate: a single-file limit is the
   author's budget, and a block a tool writes into the file is not the author's; R1c models what the
   agent actually reads, block included.
-- Exact semantics: the engine reads each file once as bytes; R1a to R1d see the text without newline
+- Exact semantics: the engine reads each file once as bytes; R1a to R1e see the text without newline
   translation, so bytes are the bytes on disk (a CRLF counts two) minus the blocks' raw bytes, the same
   unit R1c uses; lines are counted on the text outside the blocks; line length is in characters; a
   limit is exceeded when `measured > limit` (equal passes); a finding's line number is the line on
@@ -279,6 +297,64 @@ the next line of the same file (docs/adr/0006).
 Because expiry depends on the date, a repository with no commits can turn red. Run CI on a
 weekly schedule so warnings appear before that happens.
 
+## Fixes
+
+A finding may carry a fix: edits to file text, marked `safe` or `unsafe` as ruff does. The checker
+writes nothing unless asked: `--fix` applies the safe fixes and then reports the findings that are
+left, `--unsafe-fixes` (only with `--fix` or `--diff`) adds the unsafe ones, and `--diff` prints the
+same edits as a unified diff without writing (split at LF, as `git apply` reads it). Exit codes keep
+their meaning (docs/adr/0004): after `--fix` they come from the findings left, with `--diff` from the
+findings as they are, and `2` when a file cannot be written. `--fix` and `--diff` exclude each
+other, and `--diff` takes no `--format`. The action and the pre-commit hook do not pass `--fix`;
+added to a hook, it edits any file it fixes, staged or not, since the full set is always analyzed.
+
+A fix can uncover another (a directive stacked on an unused one suppresses nothing once that one is
+gone; a lowered `count` can follow), so, as in ruff, the fixes are applied again to the result until
+none is left, at most 10 passes. Two fixes whose deletions overlap (neighbouring entries sharing a
+blank line) merge into one deletion; a deletion that reaches the end of the file also takes the
+blank lines before it.
+
+Fixes edit only what the tool asked the user to write, never instruction content:
+
+- A directive none of whose rules suppresses anything: the line is removed (safe).
+- A directive some of whose rules are still in use: the unused ids are removed and the reason stays
+  (unsafe, since the reason may be about a removed id).
+- An allowlist entry with n < `count`: `count` becomes n (safe).
+- An allowlist entry whose file no longer violates its rule (n = 0 for an analyzed file): the entry is
+  removed (safe), unless no rule ran on it (it is not valid UTF-8, `E0`). When removing every
+own entry would leave the file with none while a file it extends has entries (they would come back),
+the last one stays, with its message as the suggestion.
+
+Not fixed, the message stays the suggestion: n > `count` (a new violation; raising `count` would hide
+it, docs/adr/0005), an expired entry (a person fixes the file or renews it with a new reason), and an
+entry for a file the run did not analyze (that depends on git tracking, `--no-git` and the globs, not
+on the file). A fix never widens what is suppressed.
+
+Only the config file the run loads is edited. `allowlist.entries` is a list, so a file's own list
+replaces the inherited one as a whole along `extends`; when the file has none, its entries come from a
+file it extends and get no fix. The runner has no TOML writer, so an entry is found by its
+`[[allowlist.entries]]` header line (`toml_edit.py`); an inline array, a quoted key or a header
+inside a string makes the header count differ from the entry count, and then no entry gets a fix.
+
+Two safety nets, each the only path:
+
+1. A TOML edit is parsed again with `tomllib`; when anything but the target (the entry's `count`,
+   or the entry) differs, the finding gets no fix (a multi-line string that fools the line-based
+   locator ends here).
+2. After each pass of edits, the run is repeated on the edited texts in memory. The findings it suppresses (by
+   directive or allowlist entry, compared by file, line moved by the edits, and rule) must be among
+   those suppressed before, and the effective allowlist entries must be among those before with no
+   higher `count`; otherwise nothing is written and stderr names the findings or entries (lines as
+   numbered on disk). Removing an unused directive can turn a directive stacked on it into one that
+   suppresses the next line.
+
+Edits are applied to the texts the run read, and keep line endings and every other byte. Every file
+to edit must be writable before the first is written, so a run writes all of them or none. `--fix`
+writes a short summary to stderr (how many fixes it applied in how many files, fixes it skipped,
+unsafe fixes left), so stdout stays findings only.
+Positions in JSON and SARIF are 1-based lines and columns, columns in Unicode code points, the end
+exclusive.
+
 ## Output and exit codes
 
 Every finding goes to stdout, sorted by file, line, rule (docs/adr/0004).
@@ -288,7 +364,9 @@ Every finding goes to stdout, sorted by file, line, rule (docs/adr/0004).
   `file: severity: rule-id: message`. (GNU has `sourcefile:lineno: message`, and `program: message`
   when no source file is relevant; it has no form for a whole file.)
 - `--format json`: one document `{"version": 1, "findings": [...]}`; each finding has `file`, `line`
-  (`null` for the whole file), `level` (`error` or `warning`), `rule` and `message`. `version` goes up
+  (`null` for the whole file), `level` (`error` or `warning`), `rule`, `message` and `fix`: `null`, or
+  `{"applicability": "safe" | "unsafe", "description", "edits": [...]}`, each edit with `file`,
+  `start` and `end` (`{"line", "column"}`) and the replacement `text` (Fixes). `version` goes up
   only when a field is removed or changes meaning, not when one is added.
 - `--format github`: one workflow command per finding, `::error` or `::warning` with `file`, `line`
   (omitted for the whole file; GitHub has no whole-file annotation, and its API then reports
@@ -299,8 +377,11 @@ Every finding goes to stdout, sorted by file, line, rule (docs/adr/0004).
 - `--format sarif`: one SARIF 2.1.0 log (the version GitHub code scanning reads): one run, the tool
   driver with a descriptor for every rule and pseudo rule, and one result per finding with `ruleId`,
   `level` (`error` or `warning`), `message.text` and a physical location whose `uri` is the
-  percent-encoded relative path; `region.startLine` is omitted for a whole-file finding. The action
-  does not upload it (docs/adr/0006).
+  percent-encoded relative path; `region.startLine` is omitted for a whole-file finding. A finding
+  with a fix has `fixes` (one fix: `description`, and `artifactChanges` with a `deletedRegion` and
+  `insertedContent` per edit); SARIF has no applicability, so an unsafe fix says so in its
+  description. The run sets `columnKind` to `unicodeCodePoints`. The action does not upload it
+  (docs/adr/0006).
 
 The action's `working-directory` input only changes where it runs. Reported paths stay relative to
 the git root: the runner passes a relative `file=` through unchanged and GitHub reads it from the
@@ -310,7 +391,8 @@ reads a relative SARIF `uri` the same way.
 The pseudo rule `E0` reports an instruction file that is not valid UTF-8; it is always on, and only an
 allowlist entry can exempt a file; the pseudo rule `disable` reports per-line directives (Per-line
 directives). Usage and configuration errors go to stderr (configuration
-errors as `agentfile-lint: message`; argparse prints its own usage message). Exit `0`: no errors; `1`: at least one error; `2`: usage or configuration
+errors as `agentfile-lint: message`; argparse prints its own usage message), and so does the
+`--fix` summary. Exit `0`: no errors; `1`: at least one error; `2`: usage or configuration
 problem. `--warn-as-error` promotes warnings. The formats and exit codes are part of the
 contract; which version part a change to them needs is in `docs/versioning.md`.
 

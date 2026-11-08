@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable, Iterable
 
 # Pseudo rule for an instruction file that is not valid UTF-8. No rule module and no `[rules]` level:
@@ -14,6 +14,34 @@ SEVERITY = {"error": "error", "warn": "warning"}
 JSON_VERSION = 1
 
 
+# Fix applicability, as ruff names it: `--fix` applies safe fixes, `--unsafe-fixes` adds unsafe ones.
+SAFE = "safe"
+UNSAFE = "unsafe"
+
+
+@dataclass(frozen=True)
+class Edit:
+    """Replace the text from `start` up to (not including) `end` in file `path` with `text`.
+
+    Positions are (line, column), both 1-based, columns in Unicode code points, lines as
+    `rules._text.split_lines` counts them; `end` may be the line after the last one (end of file).
+    `path` is relative to the repository root unless it is absolute (a config file outside it)."""
+
+    path: str
+    start: tuple[int, int]
+    end: tuple[int, int]
+    text: str
+
+
+@dataclass(frozen=True)
+class Fix:
+    """Edits that resolve one finding, applied together or not at all (docs/design.md, Fixes)."""
+
+    applicability: str  # SAFE | UNSAFE
+    description: str
+    edits: tuple[Edit, ...]
+
+
 @dataclass(frozen=True)
 class Finding:
     """One problem. `line` is 1-based; 0 means the finding is about the whole file."""
@@ -23,6 +51,8 @@ class Finding:
     rule: str
     message: str
     level: str = "error"  # error | warn
+    # Not part of the finding's identity: equality, sorting and the text format ignore it.
+    fix: Fix | None = field(default=None, compare=False)
 
     @property
     def severity(self) -> str:
@@ -64,11 +94,29 @@ def dump_json(obj: object) -> str:
     return json.dumps(obj, sort_keys=True, indent=2, ensure_ascii=False) + "\n"
 
 
+def _position(where: tuple[int, int]) -> dict[str, int]:
+    return {"line": where[0], "column": where[1]}
+
+
+def fix_json(fix: Fix | None) -> dict | None:
+    if fix is None:
+        return None
+    return {
+        "applicability": fix.applicability,
+        "description": fix.description,
+        "edits": [
+            {"file": e.path, "start": _position(e.start), "end": _position(e.end), "text": e.text}
+            for e in fix.edits
+        ],
+    }
+
+
 def _render_json(findings: Iterable[Finding]) -> str:
     doc = {
         "version": JSON_VERSION,
         "findings": [
-            {"file": f.path, "line": f.line or None, "level": f.severity, "rule": f.rule, "message": f.message}
+            {"file": f.path, "line": f.line or None, "level": f.severity, "rule": f.rule, "message": f.message,
+             "fix": fix_json(f.fix)}
             for f in findings
         ],
     }

@@ -54,20 +54,27 @@ class ConfigJsonTest(unittest.TestCase):
                 (root / "p.toml").write_text(f'extends = "preset:{preset}"\n')
                 r = helpers.run_new(root, "config", "--format", "json", "--config", "p.toml")
                 self.assertEqual(r.returncode, 0, r.stderr)
-                # 0.8.0 and 0.9.0 only add keys: with them removed, the output is the 0.7.0 snapshot verbatim.
+                # 0.8.0 and 0.9.0 add keys: with them removed (and the globs below restored), the output is the 0.7.0 snapshot verbatim.
                 doc = json.loads(r.stdout)
                 self.assertEqual(doc["discover"].pop("extend_globs"), [])
                 self.assertEqual(doc["shared"]["duplicates"].pop("exclude"), [])
                 self.assertEqual(doc["discover"].pop("skill_globs"), ["**/SKILL.md"])        # 0.9.0
                 self.assertEqual(doc["discover"].pop("extend_skill_globs"), [])
-                self.assertEqual(doc.pop("skills"), {"targets": ["claude-code"]})
-                self.assertEqual([doc["rules"].pop(f"S{i}") for i in range(1, 13)], [{"level": "warn"}] * 12)
+                self.assertNotIn("skills", doc)
+                self.assertEqual(doc["rules"].pop("S3"), {"level": "warn", "max_chars": 1536})
+                self.assertEqual([doc["rules"].pop(f"S{i}")["level"] for i in (1, 2, 4, 12)], ["warn"] * 4)
+                self.assertEqual([doc["rules"].pop(f"S{i}") for i in range(5, 12)], [{"level": "off"}] * 7)
                 self.assertEqual(doc["discover"].pop("hooks_globs"), ["**/.claude/settings.json", "**/.claude/settings.local.json"])
                 self.assertEqual(doc["discover"].pop("extend_hooks_globs"), [])
                 self.assertEqual(doc["discover"].pop("mcp_globs"), [".mcp.json"])
                 self.assertEqual(doc["discover"].pop("extend_mcp_globs"), [])
                 self.assertEqual([doc["rules"].pop(f"H{i}") for i in range(1, 7)], [{"level": "warn"}] * 6)
                 self.assertEqual([doc["rules"].pop(f"M{i}") for i in range(1, 5)], [{"level": "warn"}] * 4)
+                self.assertEqual(doc["rules"].pop("R1e")["level"], "warn")
+                # 0.9.0 also changes one value (Changed (breaking)): two more default globs.
+                globs = doc["discover"]["globs"]
+                self.assertEqual(globs[4:], ["**/CLAUDE.local.md", "**/.claude/rules/**/*.md"])
+                del globs[4:]
                 self.assertEqual(json.dumps(doc, sort_keys=True, indent=2, ensure_ascii=False) + "\n", (SNAPSHOTS / f"{preset}.json").read_text())
 
     def test_prints_the_effective_table_of_a_multi_id_module(self):

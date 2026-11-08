@@ -2,9 +2,10 @@
 
 A linter for agent instruction files (`AGENTS.md`, `CLAUDE.md`) that a team runs the same way in every
 repository: rules are data in one TOML file, debt exceptions expire while permanent path scopes live in
-the config with a required reason, and the runner is plain Python with no
-dependencies, so the git hook, CI and a vendored copy give the same answer. It checks `AGENTS.md`
-and `CLAUDE.md` today; `SKILL.md`, hooks and MCP config are next if it proves useful.
+the config with a required reason, and the runner is plain Python with nothing to install beyond
+it (PyYAML is vendored inside), so the git hook, CI and a vendored copy give the same answer. It
+checks `AGENTS.md`, `CLAUDE.md`, Claude Code's `.claude/rules/`, `SKILL.md` files, hooks settings and
+`.mcp.json`.
 
 ```sh
 uvx agentfile-lint        # in any git repository; no config needed
@@ -46,6 +47,7 @@ services/api/AGENTS.md:5: warning: R6: possible copied constant '`MAX_RETRIES = 
 | `R1b` | warn | warn | lines per file: `AGENTS.md` or `CLAUDE.md` over 200 lines; your own limits by glob |
 | `R1c` | error | error | `AGENTS.md` files on one path over 32 KiB in total |
 | `R1d` | off | off | characters per line (`max_chars`) |
+| `R1e` | warn | warn | characters per file Claude Code loads on demand (subdirectory `CLAUDE.md` and `CLAUDE.local.md`, `.claude/rules/`): over 40,000 |
 | `R2` | warn | warn | file shape: required section headings in order, optional title, one-line purpose, bullet-only sections (needs config) |
 | `R3a` | warn | warn | a test name in backticks is defined in a tracked test file |
 | `R3b` | off | warn | a path in backticks exists (heuristic) |
@@ -56,8 +58,8 @@ services/api/AGENTS.md:5: warning: R6: possible copied constant '`MAX_RETRIES = 
 | `R5b` | off | warn | identical lines in sibling files |
 | `R6` | off | warn | candidates for constants copied from code (heuristic, always a warning) |
 | `C1` | off | warn | `CLAUDE.md` is only the line `@AGENTS.md` (`import-only`) or absent (`forbid`) |
-| `S1`–`S4`, `S12` | warn | warn | `SKILL.md` for Claude Code: frontmatter is valid YAML, under 500 lines, `description` plus `when_to_use` within 1536 characters, `metadata` is a map, no character Claude Code refuses in `name` or the directory name |
-| `S5`–`S11` | not run | not run | `SKILL.md` for claude.ai upload and the Skills API (`[skills] targets`, below): frontmatter present, `name` and `description` limits, `name` equals its directory, only the specification's six keys |
+| `S1`–`S4`, `S12` | warn | warn | `SKILL.md` for Claude Code: frontmatter is valid YAML, under 500 lines, `description` plus `when_to_use` within `[rules.S3] max_chars` (1536), `metadata` is a map, no character Claude Code refuses in `name` or the directory name |
+| `S5`–`S11` | off | off | `SKILL.md` for claude.ai upload and the Skills API (`preset:agentskills`, below): frontmatter present, `name` and `description` limits, `name` equals its directory, only the specification's six keys |
 | `allowlist` | error | error | exceptions: expired, no-longer-needed or miscounted (`count` above or below the findings) allowlist entries fail, entries warn before they expire; an override glob that matches no file warns |
 | `disable` | error | error | per-line directives: a malformed one fails, one that suppresses nothing warns |
 
@@ -68,7 +70,9 @@ how that changed from 0.4.0: [`docs/field-report.md`](docs/field-report.md).
 
 ### Other instruction files
 
-The default checks `AGENTS.md` and `CLAUDE.md` only. To add others, list them in `[discover] extend_globs`:
+The default checks `AGENTS.md`, `CLAUDE.md`, `CLAUDE.local.md` and the `.md` files under `.claude/rules/`,
+at any depth (a rules file named `*.local.md` only through `extend_globs`). A `CLAUDE.local.md` is usually untracked, so only `--no-git` finds it. To add others, list
+them in `[discover] extend_globs`:
 
 ```toml
 [discover]
@@ -85,11 +89,13 @@ extend_globs = ["GEMINI.md", "**/GEMINI.md", ".github/copilot-instructions.md"]
 Code and the Agent Skills specification read them differently: Claude Code ignores fields it does not
 know and accepts a `name` that differs from the directory, while claude.ai upload and the Skills API
 reject any key outside the specification's six. The default checks for Claude Code; if you also upload
-your skills, add the second reader:
+your skills, add the checks for the second reader:
 
 ```toml
-[skills]
-targets = ["claude-code", "agentskills"]
+extends = ["preset:agentskills"]   # with preset:strict too: ["preset:strict", "preset:agentskills"]
+
+[rules.S3]
+max_chars = 1536                   # Claude Code's default skillListingMaxDescChars; match yours
 ```
 
 `[discover] skill_globs` replaces the `SKILL.md` glob list and `extend_skill_globs` adds to it, as
@@ -115,15 +121,15 @@ documented" means the documentation does not say, not that the feature is missin
 | | agentfile-lint | [agnix](https://github.com/agent-sh/agnix) | [ctxlint](https://github.com/YawLabs/ctxlint) | [agentlinter](https://github.com/seojoonkim/agentlinter) |
 |---|---|---|---|---|
 | Runs on | Python 3.11+, nothing to install (standard library plus a vendored copy of PyYAML) | Rust binary (npm, brew, pip, cargo) | Node (`npx`), no runtime dependencies | Node 18+ (`npx`) |
-| Files | `AGENTS.md`, `CLAUDE.md`, `SKILL.md`; others by glob | `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, hooks, MCP, Cursor, Copilot, more | context files of 16 tools, MCP config | `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, Cursor, Copilot, more |
+| Files | `AGENTS.md`, `CLAUDE.md`, `.claude/rules/`, `SKILL.md`, hooks, MCP; others by glob | `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, hooks, MCP, Cursor, Copilot, more | context files of 16 tools, MCP config | `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, Cursor, Copilot, more |
 | Shared config | `extends` presets and files | `extend` base files | not documented | `extends` of the built-in preset |
 | Exceptions | allowlist entries need a reason and an expiry date, expired or unneeded entries fail; path overrides need a reason and raise a level only with `raise = true`; per-line directives need a reason, unused ones warn | disabled rules, per-file overrides, inline comments | ignored rules with an optional reason; unused ones reported | ignored paths |
 | Vendored copy | reproducible directory with a hash check | not documented | not documented | not documented |
 | References checked | test names, `§N` spec sections; paths with `preset:strict` | import paths, commands, referenced files | paths, commands (against `package.json`, `Makefile`) | file references, imports |
 | Duplicates between files | identical lines in a file and its ancestors | not documented | duplicate content across files | duplicate content; across files not documented |
-| Auto-fix | no | yes | broken paths | yes |
+| Auto-fix | allowlist entries and per-line directives only (`--fix`, `--diff`) | yes | broken paths | yes |
 | Editor | no | LSP, IDE plugins | LSP | no |
-| Output | `file:line: severity: rule-id: message`, JSON, GitHub; exit 0/1/2 | GitHub, JSON, SARIF | text, JSON, SARIF; exit 0/1/2 | GitHub; 0-100 score |
+| Output | `file:line: severity: rule-id: message`, JSON, GitHub, SARIF; exit 0/1/2 | GitHub, JSON, SARIF | text, JSON, SARIF; exit 0/1/2 | GitHub; 0-100 score |
 
 Choose agnix for breadth (many file types, IDE plugins, auto-fix). Choose agentfile-lint to run one
 small, pinned set of rules across many repositories: debt exceptions expire and permanent ones are
@@ -140,7 +146,19 @@ agentfile-lint --today 2026-01-31    # replace the current date (reproducible ru
 agentfile-lint --config path.toml    # explicit config instead of .agentfile-lint.toml
 agentfile-lint --warn-as-error
 agentfile-lint --format json         # or github (workflow commands) or sarif; default text
+agentfile-lint --fix                 # apply safe fixes, then report what is left
+agentfile-lint --diff                # print those fixes as a diff instead; add --unsafe-fixes for the rest
 ```
+
+Fixes only touch what the tool asked you to write: an unused per-line directive is removed, an
+allowlist entry's `count` is lowered to the findings left, and an entry whose file no longer violates
+its rule is removed (only in the config file the run loads, never in one it extends). They never
+edit instruction content and never widen an exception. Removing only some ids of a directive is
+unsafe (its reason may be about them) and needs `--unsafe-fixes`. Before writing, `--fix` checks that
+each TOML edit changes nothing but its target and that the edited files suppress no finding the
+original did not; otherwise it leaves the file and the message stays as a suggestion. Exit codes
+mean what they always do (`--diff` reports the findings as they are). The pre-commit hook does not
+pass `--fix`; if you add it, it also edits files you have not staged.
 
 Other commands:
 
@@ -156,22 +174,24 @@ follows [`docs/versioning.md`](docs/versioning.md).
 Findings go to stdout, one line each: `file:line: severity: rule-id: message`, where `severity` is
 `error` or `warning`; a finding about a whole file has no line: `file: severity: rule-id: message`.
 `--format json` prints one document, `{"version": 1, "findings": [...]}`, each finding with `file`,
-`line` (`null` for a whole file), `level`, `rule` and `message`; `--format github` prints GitHub
-workflow commands; `--format sarif` prints one SARIF 2.1.0 log for code scanning. Usage and configuration problems go to stderr. Exit codes: `0` no errors, `1` at
+`line` (`null` for a whole file), `level`, `rule`, `message` and `fix` (`null` or its edits); `--format github` prints GitHub
+workflow commands; `--format sarif` prints one SARIF 2.1.0 log for code scanning, with `fixes`. Usage and configuration problems, and the `--fix` summary, go to stderr. Exit codes: `0` no errors, `1` at
 least one error, `2` usage or configuration problem.
 
 Files given on the command line are ignored; the full tracked set is always analyzed
-(cross-file checks and allowlist checks need it). Untracked local instruction
-files (`*.local.md`) are never analyzed. `--no-git` analyzes every file under the current directory
+(cross-file checks and allowlist checks need it). A `*.local.md` file is analyzed only through a glob
+that names it, such as the default `**/CLAUDE.local.md`; `**/*.md` does not find `NOTES.local.md`. `--no-git` analyzes every file under the current directory
 instead, with the same globs; it skips `.git`, `node_modules`, virtual environments and tool caches by
 a fixed list and does not read `.gitignore`.
 
 ## Configuration
 
-`.agentfile-lint.toml` at the repository root extends the shipped preset. Unknown keys fail.
+`.agentfile-lint.toml` at the repository root is applied on top of the default preset, and each
+`extends` entry (a shipped preset or a path) is applied in order before it, each one changing only the
+keys it sets. Unknown keys fail.
 
 ```toml
-extends = ["preset:default"]        # default; other entries are paths relative to this file
+extends = ["preset:strict"]         # optional; other entries are paths relative to this file
 
 [discover]
 globs = ["AGENTS.md", "**/AGENTS.md"]
@@ -229,19 +249,39 @@ A single line can be exempted in the file itself, with the rule ids and a requir
 Run make check before every push.
 ```
 
-It covers the next line only and not the whole-file rules (`R1a`, `R1b`, `R1c`, `C1`); a directive that
+It covers the next line only and not the whole-file rules (`R1a`, `R1b`, `R1c`, `R1e`, `C1`); a directive that
 suppresses nothing is a warning, a malformed one an error.
 
 ## Install and wire up
 
-pre-commit:
+Every way to run it needs Python 3.11 or newer. To run it without installing, use `uvx` as above. To
+install the `agentfile-lint` command for your user, in its own environment:
+
+```sh
+pipx install agentfile-lint                          # or agentfile-lint==<version> to pin
+pipx install --python python3.12 agentfile-lint      # when the default python3 is older than 3.11
+pipx upgrade agentfile-lint
+```
+
+pre-commit, in `.pre-commit-config.yaml`:
 
 ```yaml
-- repo: https://github.com/Will413028/agentfile-lint
-  rev: <tag or full commit SHA>
-  hooks:
-    - id: agentfile-lint
+repos:
+  - repo: https://github.com/Will413028/agentfile-lint
+    rev: <tag or full commit SHA>
+    hooks:
+      - id: agentfile-lint
+        # language_version: python3.12   # when pre-commit's default Python is older than 3.11
 ```
+
+```sh
+pre-commit install                     # run the hook on every commit
+pre-commit run agentfile-lint          # run it once now
+pre-commit autoupdate --freeze --repo https://github.com/Will413028/agentfile-lint   # newest tag, as a full SHA
+```
+
+`autoupdate` finds 0.9.0 and later; before 0.9.0 it picked 0.4.0, so set `rev:` by hand when moving
+to a version older than 0.9.0.
 
 Run on every commit and push: rules R3a, R3b and R3c read test files, source and docs, and cross-file
 rules read the whole tracked set, so do not filter the hook, lefthook entry or workflow by instruction

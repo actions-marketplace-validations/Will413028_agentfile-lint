@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import datetime
-from dataclasses import replace
+from collections import Counter
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from . import allowlist, disable, discover, overrides
@@ -27,9 +28,46 @@ def _level(rule_level: str, finding: Finding) -> str:
     return "warn" if rule_level == "warn" or finding.level == "warn" else "error"
 
 
+@dataclass
+class Analysis:
+    findings: list[Finding]
+    suppressed: list[Finding]  # dropped by a per-line directive or an allowlist entry (fix safety net 2)
+    texts: dict[str, str]      # what fixes' edits are computed on: analyzed files and the config, as stored
+
+
 def analyze(
     root: Path, config: Config, today: datetime.date, warn_as_error: bool = False, use_git: bool = True,
 ) -> list[Finding]:
+    return run(root, config, today, warn_as_error, use_git).findings
+
+
+def edit_path(root: Path, path: Path) -> str:
+    """How a fix names a file: relative to the root (as findings do) when inside it, else absolute."""
+    full = Path(path).resolve()
+    try:
+        return full.relative_to(Path(root).resolve()).as_posix()
+    except ValueError:
+        return full.as_posix()
+
+
+def _dropped(before: list[Finding], after: list[Finding]) -> list[Finding]:
+    left = Counter(after)
+    out = []
+    for f in before:
+        if left[f]:
+            left[f] -= 1
+        else:
+            out.append(f)
+    return out
+
+
+def run(
+    root: Path, config: Config, today: datetime.date, warn_as_error: bool = False, use_git: bool = True,
+    replaced: dict[str, str] | None = None,
+) -> Analysis:
+    """`analyze` plus what was suppressed and the texts read. `replaced` (path -> text) stands in for
+    files on disk: the edited texts `--fix` checks before writing them."""
+    replaced = replaced or {}
     files = discover.list_files(root, use_git)
     # Each family's rules see only that family's files; a file two glob lists match is in both.
     family_paths: dict[str, list[str]] = {}
@@ -42,7 +80,8 @@ def analyze(
     stored: dict[str, str] = {}
     for path in dict.fromkeys(analyzed):
         try:
-            stored[path] = (root / path).read_bytes().decode("utf-8")  # read once, as stored (docs/design.md, R1a to R1d)
+            raw = replaced[path] if path in replaced else (root / path).read_bytes().decode("utf-8")
+            stored[path] = raw  # read once, as stored (docs/design.md, R1a to R1d)
         except UnicodeDecodeError:
             findings.append(Finding(path, 0, INPUT_RULE, "file is not valid UTF-8"))
     ctx = Context(root, files, {p: stored[p] for p in family_paths[INSTRUCTION] if p in stored})
@@ -69,9 +108,18 @@ def analyze(
             if level != "off":
                 findings.append(replace(f, level=level))
     # Per-line directives before the allowlist: a suppressed finding never counts toward an entry's count.
+    before = findings
     findings = disable.apply(findings, ctx.files)
-    findings = allowlist.apply(findings, config.entries, config.allowlist, set(analyzed), today)
+    suppressed = _dropped(before, findings)
+    source = config.source
+    config_key = edit_path(root, source.path) if source else None
+    editable = allowlist.Editable(config_key, source.text, source.inherits_entries) if source and source.own_entries else None
+    before = findings
+    # A file that is not valid UTF-8 had no rule run on it: n = 0 there says nothing, so no fix.
+    findings = allowlist.apply(findings, config.entries, config.allowlist, set(analyzed), today, editable, set(stored))
+    suppressed += _dropped(before, findings)
     findings += overrides.stale(config.overrides, set(analyzed), root)
     if warn_as_error:
         findings = [replace(f, level="error") for f in findings]
-    return sorted(findings, key=Finding.sort_key)
+    read = dict(stored) | ({config_key: source.text} if source else {})
+    return Analysis(sorted(findings, key=Finding.sort_key), suppressed, read)

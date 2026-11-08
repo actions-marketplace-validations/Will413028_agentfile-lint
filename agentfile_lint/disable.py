@@ -6,13 +6,18 @@ aliases and a reason after ` -- ` are required; whole-file rules (`WHOLE_FILE` i
 accepted, since their findings have no line. A malformed directive is an error and a directive that
 drops nothing is a warning, both under the pseudo rule `disable`, which no level or override changes.
 Suppressed findings never reach the allowlist, so they do not count toward an entry's `count`.
+
+Fixes (docs/design.md, Fixes): a directive none of whose rules suppresses anything is removed, line and
+all (safe); one with some rules still in use loses the unused ids and keeps its reason (unsafe, since
+the reason may be about a removed id).
 """
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
 
-from .finding import Finding
+from . import fix
+from .finding import SAFE, UNSAFE, Edit, Finding, Fix
 from .rules import ALIASES, FAMILY, FAMILY_FILES, INSTRUCTION, MODULES, RETIRED, RULES
 from .rules._text import prose_lines_raw
 
@@ -35,6 +40,8 @@ class Directive:
     path: str
     line: int
     rules: frozenset[str]
+    names: tuple[str, ...] = ()           # ids and aliases as written
+    names_span: tuple[int, int] = (0, 0)  # 1-based columns of the id list: first, and one past the last
 
 
 def _parse(path: str, number: int, line: str) -> Directive | Finding:
@@ -44,6 +51,8 @@ def _parse(path: str, number: int, line: str) -> Directive | Finding:
                        f"malformed directive; write <!-- {DIRECTIVE} <rule ids> -- <reason> --> on its own line")
     ids_part, sep, reason = (" " + (m.group("body") or "")).partition(" -- ")
     names = [n for n in re.split(r"[\s,]+", ids_part.strip()) if n]
+    first = m.start("body") + len(ids_part) - len(ids_part.lstrip()) if names else 0  # ids_part has one extra space
+    span = (first, first + len(ids_part.strip()))
     if not names:
         return Finding(path, number, RULE_ID, "directive names no rule id")
     if not sep or not reason.strip():
@@ -63,7 +72,7 @@ def _parse(path: str, number: int, line: str) -> Directive | Finding:
             return Finding(path, number, RULE_ID,
                            f"{rule} is a whole-file rule; use an allowlist entry or an override instead")
         rules.add(rule)
-    return Directive(path, number, frozenset(rules))
+    return Directive(path, number, frozenset(rules), tuple(names), span)
 
 
 def scan(path: str, text: str) -> tuple[list[Directive], list[Finding]]:
@@ -104,9 +113,20 @@ def apply(findings: list[Finding], files: dict[str, str]) -> list[Finding]:
         else:
             kept.append(f)
     for d in directives:
-        for rule in sorted(d.rules):
-            if (d, rule) not in used:
-                notes.append(Finding(d.path, d.line, RULE_ID,
-                                     f"directive for {rule} suppresses nothing on the next line; remove it",
-                                     level="warn"))
+        unused = [rule for rule in sorted(d.rules) if (d, rule) not in used]
+        repair = _fix(d, unused, files[d.path]) if unused else None
+        for rule in unused:
+            notes.append(Finding(d.path, d.line, RULE_ID,
+                                 f"directive for {rule} suppresses nothing on the next line; remove it",
+                                 level="warn", fix=repair))
     return kept + notes
+
+
+def _fix(d: Directive, unused: list[str], text: str) -> Fix:
+    """One fix for every unused rule of a directive, so `--fix` edits the line once."""
+    if len(unused) == len(d.rules):
+        return Fix(SAFE, "remove the directive", (fix.line_delete(d.path, text, d.line, d.line),))
+    kept = [name for name in d.names if ALIASES.get(name, name) not in unused]
+    gone = " and ".join(unused)
+    return Fix(UNSAFE, f"remove {', '.join(unused)} from the directive (unsafe: the reason may be about {gone})",
+               (Edit(d.path, (d.line, d.names_span[0]), (d.line, d.names_span[1]), ", ".join(kept)),))

@@ -61,10 +61,22 @@ Options:
 
 - A: every `S` rule belongs to the reader groups it protects: `claude-code` (on by default),
   `agentskills` (claude.ai upload, the Skills API and the specification), or both when both readers
-  break the same way (S1 YAML that does not parse, S2 the 500-line guidance); `[skills] targets`
-  selects the groups, and a rule none of them reads does not run.
+  break the same way (S1 YAML that does not parse, S2 the 500-line guidance); a `[skills] targets`
+  key selects the groups, and a rule none of them reads does not run.
+- A2: the same groups, selected by levels: the default preset turns on the Claude Code ids and leaves
+  the others `off`; a shipped preset `preset:agentskills` turns them on, the way an ESLint plugin's
+  `recommended` config turns on a set of rules.
 - B: one rule set for every reader, following the specification.
 
-Decision: A, the way ESLint `env`, browserslist and `tsconfig` `target` check against a declared
-target. B reports most Claude Code skills as broken. Cost: a user who uploads skills to claude.ai has
-to add `agentskills`.
+Decision: A2, revised before 0.9.0 was released (A was implemented first). B reports most Claude Code
+skills as broken. A added a second switch beside the level: an id outside the targets did not run
+whatever its level, and a raising override could not turn it on, so a repository could not enable one
+upload check alone. A2 keeps one switch, and an id added to the upload group later reaches every
+repository that extends the preset. The closest comparable tool, agnix, filters by tool
+(`tools = [...]`); this tool already has presets and no group mechanism, so A2 follows its own
+configuration model. A2 needs presets that combine, which 0.9.0 provides (docs/adr/0008).
+Cost: a user who uploads skills to claude.ai adds `extends = ["preset:agentskills"]`.
+
+S3's limit is a parameter, `[rules.S3] max_chars` (default 1536): Claude Code's
+`skillListingMaxDescChars` setting changes the cut, and turning S3 off was the only way to follow it.
+

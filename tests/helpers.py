@@ -19,6 +19,8 @@ def make_repo(files: dict[str, str | bytes], track: bool = True, symlinks: dict[
     target (as written into the link); `track` runs `git add -A`."""
     root = Path(tempfile.mkdtemp(prefix="il-test-"))
     subprocess.run(["git", "init", "-q", str(root)], check=True)
+    # Hermetic: a machine-wide ignore file (core.excludesFile) must not decide what gets tracked.
+    subprocess.run(["git", "-C", str(root), "config", "core.excludesFile", "/dev/null"], check=True)
     for name, content in files.items():
         path = root / name
         path.parent.mkdir(parents=True, exist_ok=True)

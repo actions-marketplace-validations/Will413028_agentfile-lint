@@ -5,24 +5,25 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-06
+
 ### Added
 
 - `agentfile_lint/_yaml/`: the pure-Python part of PyYAML 6.0.3 (MIT), vendored unchanged with its
   `LICENSE` and a `PROVENANCE` record, and `agentfile_lint/frontmatter.py`, which parses YAML
   frontmatter with it (`SafeLoader` only) for the coming `SKILL.md` rules. Nothing new to install;
   `dependencies` stays empty. The vendored copy written by `vendor` now includes `_yaml/` (docs/adr/0007).
-- `SKILL.md` rules S1 to S12, all at `warn`, run on a new file family: `[discover] skill_globs`
+- `SKILL.md` rules S1 to S12, at `warn` or `off` (below), run on a new file family: `[discover] skill_globs`
   (default `["**/SKILL.md"]`) and `extend_skill_globs`, which concatenates along `extends` like
-  `extend_globs`. No R or C rule runs on a `SKILL.md`. Each S id belongs to the reader it protects:
-  `claude-code` (S1 to S4 and S12: YAML that parses, fewer than 500 lines, `description` plus `when_to_use` within
-  Claude Code's 1536-character listing, `metadata` a map; S12, no character Claude Code refuses in
-  `name` or the directory name) and `agentskills` (S1, S2 and S5 to S11:
-  claude.ai upload, the Skills API and the Agent Skills specification). The new `[skills] targets`
-  (default `["claude-code"]`) names the readers a repository writes for; S5 to S11 run only with
-  `agentskills` listed, and an unknown target fails the configuration; an empty `targets` or
-  `skill_globs` turns the family off. Frontmatter scalars are read as their text, without YAML 1.1
-  types (docs/rules.md, docs/adr/0007).
-  `config --format json` shows `skills` and the two new `discover` keys; the E0 description now reads
+  `extend_globs`. No R or C rule runs on a `SKILL.md`. Each S id protects one reader or both. For
+  Claude Code, on by default: S1 to S4 and S12 (YAML that parses, fewer than 500 lines, `description`
+  plus `when_to_use` within the skill listing's `[rules.S3] max_chars`, default 1536, `metadata` a
+  map, no character Claude Code refuses in `name` or the directory name). For claude.ai upload, the
+  Skills API and the Agent Skills specification: S1, S2 and S5 to S11, where S5 to S11 are `off` in
+  the default preset and `warn` in the new `preset:agentskills`. An empty `skill_globs` turns the
+  family off. Frontmatter scalars are read as their text, without YAML 1.1 types (docs/rules.md,
+  docs/adr/0007).
+  `config --format json` shows the two new `discover` keys; the E0 description now reads
   "analyzed file".
 - Hook rules H1 to H6 and `.mcp.json` rules M1 to M4, all at `warn`, on two new file families:
   `[discover] hooks_globs` (default `["**/.claude/settings.json", "**/.claude/settings.local.json"]`)
@@ -35,6 +36,45 @@ versions follow [Semantic Versioning](https://semver.org/).
   entry (measured with `claude doctor` and `claude mcp list` on 2.1.318), plus H6; optional fields
   are not checked (docs/rules.md). `config --format json` shows the four new `discover` keys.
 
+- R1e (`file-chars`) at `warn`: Claude Code's per-file character limit on the files it loads on demand
+  and cuts past 40,000 characters with a 200K context: `CLAUDE.md` and `CLAUDE.local.md` in a
+  subdirectory, a subdirectory's `.claude/rules/`, and path-scoped rules in the root `.claude/rules/`.
+  Counted as `wc -m` counts, after removing the frontmatter and block-level HTML comments and trimming
+  whitespace; `excluded_blocks` does not apply. `[[rules.R1e.limits]]` entries take `glob`,
+  `max_chars` (none: no limit) and `frontmatter_key` (the entry applies only when the frontmatter has
+  that key). A per-line directive cannot name it (docs/rules.md, docs/adr/0003).
+
+- Fixes: a finding may carry a fix, `safe` or `unsafe`. `--fix` applies the safe ones (again on the
+  result until none is left) and reports what is left, `--unsafe-fixes` adds the unsafe ones,
+  `--diff` prints them as a unified diff without writing. Exit codes keep their meaning; a file that
+  cannot be written exits 2 with nothing written. The first fixes edit only what the tool asked for:
+  an unused per-line directive is removed (safe), unused ids of a partly used one are removed
+  (unsafe), an allowlist entry's `count` is lowered to n and an entry whose file no longer violates
+  its rule is removed (safe, only in the config file the run loads). n > `count`, expired entries
+  and entries for files the run did not analyze stay suggestions. Two checks guard every write: a
+  TOML edit must re-parse to the original with only its target changed, and a second run on the
+  edited text may suppress no finding the first did not (docs/design.md, Fixes). Nothing is written
+  without `--fix`; the action and the pre-commit hook do not pass it.
+
+### Changed (breaking)
+
+- `preset:default` is applied once, first, under the config file a run loads; every file in
+  `extends` (a shipped preset or a shared file) is a change on top, even when it names
+  `preset:default` or has no `extends`. Before, each such file applied the whole default again, so a
+  later entry reset what an earlier one set: `extends = ["preset:strict", "team.toml"]` lost every
+  strict setting. A config that relied on that reset changes; a root config with `extends = []` now
+  starts from the default too (docs/adr/0008).
+- JSON findings have a new `fix` field (`null`, or applicability, description and edits); SARIF
+  results with a fix have `fixes`, and the run sets `columnKind: "unicodeCodePoints"`. The JSON
+  `version` stays 1 (it goes up only when a field is removed or changes meaning), but a consumer that
+  compares whole objects sees the new key.
+- `[discover] globs` adds `**/CLAUDE.local.md` and `**/.claude/rules/**/*.md` to the default, two
+  files Claude Code loads like `CLAUDE.md` (https://code.claude.com/docs/en/memory). A repository that
+  keeps the default glob list now gets findings on those files; one with its own `globs` is unchanged.
+- A `*.local.md` file is now analyzed when a glob that itself ends in `.local.md` matches it (before,
+  never). Wider globs such as `**/*.md` still skip it. Override paths and R5's `exclude` now match
+  such a file like any other.
+
 ### Changed
 
 - The `allowlist` notes for an entry or override glob that matches no analyzed file now say "analyzed
@@ -45,6 +85,9 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 - File names on the command line now start a run when they match any file family's globs. Before,
   only instruction-file names did, so `agentfile-lint path/to/SKILL.md` printed nothing.
+- `pre-commit autoupdate` now finds the newest release. Tags from 0.5.0 to 0.8.0 were not reachable
+  from the default branch, so it moved `rev:` to 0.4.0; each release now fast-forwards `dev` to the
+  tagged commit (`docs/versioning.md`). The README adds `pipx` and pre-commit usage.
 
 ## [0.8.0] - 2026-11-05
 

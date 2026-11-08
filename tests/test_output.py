@@ -78,9 +78,9 @@ class JsonFormatTest(unittest.TestCase):
         self.assertEqual(json.loads(r.stdout), {
             "version": 1,
             "findings": [
-                {"file": "AGENTS.md", "line": None, "level": "warning", "rule": "R1b", "message": "file is 2 lines, limit 1"},
-                {"file": "AGENTS.md", "line": 2, "level": "error", "rule": "R1d", "message": "line is 600 characters, limit 500"},
-                {"file": "a,b/AGENTS.md", "line": 1, "level": "warning", "rule": "R5a", "message": R5_MESSAGE},
+                {"file": "AGENTS.md", "line": None, "level": "warning", "rule": "R1b", "message": "file is 2 lines, limit 1", "fix": None},
+                {"file": "AGENTS.md", "line": 2, "level": "error", "rule": "R1d", "message": "line is 600 characters, limit 500", "fix": None},
+                {"file": "a,b/AGENTS.md", "line": 1, "level": "warning", "rule": "R5a", "message": R5_MESSAGE, "fix": None},
             ],
         })
 

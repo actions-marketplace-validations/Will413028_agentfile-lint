@@ -13,6 +13,15 @@ was rerun the same way against 0.7.0: every finding and exit code is identical, 
 sample file contains the line breaks 0.8.0 stopped counting). The numbers below hold for 0.5.0 to 0.8.0
 and use the 0.7.0 ids.
 
+0.9.0 was rerun on 2026-11-06 against 0.8.0 on the same commits (checkouts holding every instruction,
+`SKILL.md`, `.claude/` and `.mcp.json` file; both versions on the same checkouts). With no config,
+every R and C finding and every exit code is identical (103 findings). With `preset:strict`, they are
+identical except 13 new findings on two `.claude/rules/` files in one repository, which the default
+globs now include (R5a 12, R6 1). The new families with no config: S1 on 1 `SKILL.md` (1 repository)
+and S2 on 199 (8 repositories); no S3, S4, S12, H, M or R1e finding. `preset:agentskills` adds S5 on
+4 files (2 repositories), S7 on 30 (2), S8 on 29 (1), S10 on 3 (1) and S11 on 877 (12): keys and names
+Claude Code accepts and claude.ai upload rejects. No new finding is an error, so no exit code changes.
+
 ## Summary
 
 - 0.5.0 with no config: 103 findings in 11 of 22 repositories; 6 repositories exit 1. 0.4.0 gave 1096

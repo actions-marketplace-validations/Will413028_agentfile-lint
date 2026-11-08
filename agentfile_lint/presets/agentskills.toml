@@ -1,0 +1,26 @@
+# preset:agentskills -- the default preset plus the SKILL.md checks for claude.ai upload, the Skills
+# API and the Agent Skills specification (S5 to S11), as warnings. Claude Code accepts what they
+# report; a repository that uploads its skills, or wants them portable, adds
+# `extends = ["preset:agentskills"]` (with preset:strict too, if it uses that). docs/rules.md, "S1 to S12".
+# Like every file a config extends, it is a change on top of preset:default, which applies once.
+
+[rules.S5]
+level = "warn"
+
+[rules.S6]
+level = "warn"
+
+[rules.S7]
+level = "warn"
+
+[rules.S8]
+level = "warn"
+
+[rules.S9]
+level = "warn"
+
+[rules.S10]
+level = "warn"
+
+[rules.S11]
+level = "warn"

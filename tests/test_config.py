@@ -1,3 +1,4 @@
+import json
 import unittest
 from pathlib import Path
 
@@ -120,7 +121,7 @@ class ConfigTest(unittest.TestCase):
             "size": {"excluded_blocks": []},
             "duplicates": {"ancestor_pairs": "same-name", "min_chars": 40, "ignore_headings": True, "ignore_patterns": [], "exclude": []},
         })
-        self.assertEqual(list(doc["rules"]), sorted(["R1a", "R1b", "R1c", "R1d", "R2", "R3a", "R3b", "R3c", "R4a", "R4b", "R5a", "R5b", "R6", "C1"]
+        self.assertEqual(list(doc["rules"]), sorted(["R1a", "R1b", "R1c", "R1d", "R1e", "R2", "R3a", "R3b", "R3c", "R4a", "R4b", "R5a", "R5b", "R6", "C1"]
                                                     + [f"S{i}" for i in range(1, 13)] + [f"H{i}" for i in range(1, 7)]
                                                     + [f"M{i}" for i in range(1, 5)]))
         self.assertEqual(doc["rules"]["R5b"], {"level": "off"})
@@ -133,6 +134,61 @@ class ConfigTest(unittest.TestCase):
         import json
         doc = json.loads(helpers.run_new(root, "config").stdout)
         self.assertEqual((doc["shared"]["duplicates"]["min_chars"], doc["shared"]["duplicates"]["ancestor_pairs"]), (10, "any"))
+
+
+def effective(files: dict[str, str], *args: str) -> dict:
+    r = helpers.run_new(helpers.make_repo({"AGENTS.md": "ok\n", **files}), "config", "--format", "json", *args)
+    if r.returncode != 0:
+        raise AssertionError(r.stderr)
+    return json.loads(r.stdout)
+
+
+STRICT_IDS = ("R3b", "R4a", "R4b", "R5b", "R6", "C1")
+
+
+class ExtendsDefaultAtRootTest(unittest.TestCase):
+    """preset:default is applied once, at the root; every file it extends is a change on top (docs/design.md, Layers; docs/adr/0008).
+
+    Before 0.9.0 each file without `extends` (a shipped preset or a shared file) applied the default
+    again, so a later file reset what an earlier one set."""
+
+    TEAM = "[rules.R1b]\nlevel = 'error'\n"
+
+    def test_a_shared_file_after_a_preset_keeps_the_preset(self):
+        for team in (self.TEAM, "extends = ['preset:default']\n" + self.TEAM):
+            with self.subTest(team=team):
+                doc = effective({"team.toml": team, ".agentfile-lint.toml": "extends = ['preset:strict', 'team.toml']\n"})
+                self.assertEqual([doc["rules"][i]["level"] for i in STRICT_IDS], ["warn"] * len(STRICT_IDS))
+                self.assertEqual(doc["rules"]["R1b"]["level"], "error")
+                self.assertEqual(doc["shared"]["duplicates"]["ancestor_pairs"], "any")
+
+    def test_two_shipped_presets_combine_in_either_order(self):
+        for order in ("'preset:strict', 'preset:agentskills'", "'preset:agentskills', 'preset:strict'"):
+            with self.subTest(order=order):
+                doc = effective({".agentfile-lint.toml": f"extends = [{order}]\n"})
+                self.assertEqual(doc["rules"]["R4b"]["level"], "warn")
+                self.assertEqual(doc["rules"]["S11"]["level"], "warn")
+
+    def test_a_later_file_does_not_reset_keys_an_earlier_one_set(self):
+        base = "[discover]\nglobs = ['AGENTS.md']\n[allowlist]\nmax_entries = 30\n"
+        doc = effective({"base.toml": base, "team.toml": self.TEAM,
+                         ".agentfile-lint.toml": "extends = ['base.toml', 'team.toml']\n"})
+        self.assertEqual(doc["discover"]["globs"], ["AGENTS.md"])
+        self.assertEqual(doc["allowlist"]["max_entries"], 30)
+
+    def test_later_entries_still_win(self):
+        doc = effective({"off.toml": "[rules.R4b]\nlevel = 'off'\n",
+                         ".agentfile-lint.toml": "extends = ['preset:strict', 'off.toml']\n"})
+        self.assertEqual(doc["rules"]["R4b"]["level"], "off")
+        self.assertEqual(doc["rules"]["R4a"]["level"], "warn")
+
+    def test_any_config_loads_alone_on_the_default(self):
+        # A shared file given with --config, and a root that writes `extends = []`, both get the default.
+        for name, text in (("team.toml", self.TEAM), ("empty.toml", "extends = []\n" + self.TEAM)):
+            with self.subTest(name=name):
+                doc = effective({name: text}, "--config", name)
+                self.assertEqual(doc["rules"]["R1b"]["level"], "error")
+                self.assertEqual(doc["rules"]["R1c"]["level"], "error")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 version: 2
 updates:
-  # The runner has no third-party dependencies; only workflow actions need updates.
+  # The runner has no installed dependencies; only workflow actions need updates. The vendored
+  # PyYAML (agentfile_lint/_yaml/PROVENANCE) is not something Dependabot can see.
   - package-ecosystem: github-actions
     directory: /
     target-branch: dev

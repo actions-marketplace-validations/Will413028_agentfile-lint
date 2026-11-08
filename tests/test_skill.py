@@ -4,17 +4,16 @@ import unittest
 
 from helpers import make_repo, run_new
 
-CC = 'targets = ["claude-code"]'
-AS = 'targets = ["agentskills"]'
-BOTH = 'targets = ["claude-code", "agentskills"]'
+CC = ""                                          # the default: the Claude Code ids only
+BOTH = 'extends = ["preset:agentskills"]\n'       # adds the ids for claude.ai upload and the Skills API
 GOOD = "---\nname: pdf\ndescription: Use when reading PDFs.\n---\n# PDF\n"
 
 
-def lint(files: dict[str, str], targets: str | None = None, extra: str = "", *args: str):
+def lint(files: dict[str, str], config: str = "", extra: str = "", *args: str):
     """Findings as (path, line, rule) triples from a JSON run, plus the completed process."""
     files = dict(files)
-    if targets is not None or extra:
-        files[".agentfile-lint.toml"] = (f"[skills]\n{targets}\n" if targets else "") + extra
+    if config or extra:
+        files[".agentfile-lint.toml"] = config + extra
     root = make_repo(files)
     r = run_new(root, "--format", "json", "--today", "2026-11-06", *args)
     if r.returncode == 2:
@@ -23,8 +22,8 @@ def lint(files: dict[str, str], targets: str | None = None, extra: str = "", *ar
     return [(f["file"], f["line"], f["rule"]) for f in doc["findings"]], r, doc
 
 
-def rules_of(files, targets=None, extra=""):
-    return sorted({rule for _, _, rule in lint(files, targets, extra)[0]})
+def rules_of(files, config="", extra=""):
+    return sorted({rule for _, _, rule in lint(files, config, extra)[0]})
 
 
 class ValidSkillTest(unittest.TestCase):
@@ -75,6 +74,20 @@ class ClaudeCodeGroupTest(unittest.TestCase):
         found, _, doc = lint({"s/a/SKILL.md": over})
         self.assertEqual(found, [("s/a/SKILL.md", 3, "S3")])
         self.assertIn("1537", doc["findings"][0]["message"])
+
+    def test_listing_limit_is_s3_max_chars(self):
+        # Claude Code's `skillListingMaxDescChars` changes the limit; S3 follows with `max_chars`.
+        over = "---\nname: a\ndescription: " + "d" * 1537 + "\n---\n"
+        raised = '[rules.S3]\nlevel = "warn"\nmax_chars = 2000\n'
+        self.assertEqual(rules_of({"s/a/SKILL.md": over}, extra=raised), [])
+        found, _, doc = lint({"s/a/SKILL.md": over}, extra='[rules.S3]\nlevel = "warn"\nmax_chars = 100\n')
+        self.assertEqual(found, [("s/a/SKILL.md", 3, "S3")])
+        self.assertIn("at 100", doc["findings"][0]["message"])
+        for bad in ("0", '"1536"', "true"):
+            with self.subTest(max_chars=bad):
+                r = run_new(make_repo({".agentfile-lint.toml": f'[rules.S3]\nlevel = "warn"\nmax_chars = {bad}\n'}))
+                self.assertEqual(r.returncode, 2, r.stdout)
+                self.assertIn("rules.S3.max_chars", r.stderr)
 
     def test_listing_limit_counts_characters_not_bytes(self):
         text = "---\nname: a\ndescription: " + "é" * 1536 + "\n---\n"
@@ -145,38 +158,38 @@ class RefusedNameCharactersTest(unittest.TestCase):
         self.assertEqual(found, [("s/bad\u00a0dir/SKILL.md", None, "S12")])
         self.assertIn("directory", doc["findings"][0]["message"])
 
-    def test_only_for_the_claude_code_reader(self):
-        self.assertNotIn("S12", rules_of({"s/a/SKILL.md": '---\nname: "a<b"\ndescription: d\n---\n'}, AS))
+    def test_preset_agentskills_keeps_the_claude_code_ids(self):
+        self.assertIn("S12", rules_of({"s/a/SKILL.md": '---\nname: "a<b"\ndescription: d\n---\n'}, BOTH))
 
 
 class AgentSkillsGroupTest(unittest.TestCase):
     def test_missing_frontmatter(self):
-        found, _, _ = lint({"s/a/SKILL.md": "# A\n"}, AS)
+        found, _, _ = lint({"s/a/SKILL.md": "# A\n"}, BOTH)
         self.assertEqual(found, [("s/a/SKILL.md", None, "S5")])
 
     def test_name_length(self):
         n64, n65 = "a" * 64, "a" * 65
-        self.assertEqual(rules_of({f"s/{n64}/SKILL.md": f"---\nname: {n64}\ndescription: d\n---\n"}, AS), [])
-        self.assertEqual(rules_of({f"s/{n65}/SKILL.md": f"---\nname: {n65}\ndescription: d\n---\n"}, AS), ["S6"])
-        self.assertEqual(rules_of({"s/a/SKILL.md": "---\ndescription: d\n---\n"}, AS), ["S6"])
-        self.assertEqual(rules_of({"s/a/SKILL.md": "---\nname: ''\ndescription: d\n---\n"}, AS), ["S6"])
-        self.assertEqual(rules_of({"s/a/SKILL.md": "---\nname: [a]\ndescription: d\n---\n"}, AS), ["S6"])
+        self.assertEqual(rules_of({f"s/{n64}/SKILL.md": f"---\nname: {n64}\ndescription: d\n---\n"}, BOTH), [])
+        self.assertEqual(rules_of({f"s/{n65}/SKILL.md": f"---\nname: {n65}\ndescription: d\n---\n"}, BOTH), ["S6"])
+        self.assertEqual(rules_of({"s/a/SKILL.md": "---\ndescription: d\n---\n"}, BOTH), ["S6"])
+        self.assertEqual(rules_of({"s/a/SKILL.md": "---\nname: ''\ndescription: d\n---\n"}, BOTH), ["S6"])
+        self.assertEqual(rules_of({"s/a/SKILL.md": "---\nname: [a]\ndescription: d\n---\n"}, BOTH), ["S6"])
         # Scalars are their text: `12` is the name "12", as strictyaml reads it.
-        self.assertEqual(rules_of({"s/12/SKILL.md": "---\nname: 12\ndescription: d\n---\n"}, AS), [])
+        self.assertEqual(rules_of({"s/12/SKILL.md": "---\nname: 12\ndescription: d\n---\n"}, BOTH), [])
 
     def test_name_characters(self):
         for name in ("bad--name", "-bad", "bad-", "Bad", "bad_name", "n8n:bad"):
             with self.subTest(name=name):
                 files = {f"s/{name}/SKILL.md": f"---\nname: '{name}'\ndescription: d\n---\n"}
-                self.assertEqual(rules_of(files, AS), ["S7"])
+                self.assertEqual(rules_of(files, BOTH), ["S7"])
         # The reference validator takes Unicode lowercase letters after NFKC.
-        self.assertEqual(rules_of({"s/données/SKILL.md": "---\nname: données\ndescription: d\n---\n"}, AS), [])
+        self.assertEqual(rules_of({"s/données/SKILL.md": "---\nname: données\ndescription: d\n---\n"}, BOTH), [])
 
     def test_root_skill_md_has_no_directory_to_compare(self):
-        self.assertEqual(rules_of({"SKILL.md": "---\nname: sk\ndescription: d\n---\n"}, AS), [])
+        self.assertEqual(rules_of({"SKILL.md": "---\nname: sk\ndescription: d\n---\n"}, BOTH), [])
 
     def test_name_must_equal_the_directory(self):
-        found, _, doc = lint({"s/pdf-tools/SKILL.md": "---\nname: pdf\ndescription: d\n---\n"}, AS)
+        found, _, doc = lint({"s/pdf-tools/SKILL.md": "---\nname: pdf\ndescription: d\n---\n"}, BOTH)
         self.assertEqual(found, [("s/pdf-tools/SKILL.md", 2, "S8")])
         self.assertIn("pdf-tools", doc["findings"][0]["message"])
         # Claude Code takes a name that differs from its directory.
@@ -185,21 +198,21 @@ class AgentSkillsGroupTest(unittest.TestCase):
     def test_description_length(self):
         ok = "---\nname: a\ndescription: " + "d" * 1024 + "\n---\n"
         over = "---\nname: a\ndescription: " + "d" * 1025 + "\n---\n"
-        self.assertEqual(rules_of({"s/a/SKILL.md": ok}, AS), [])
-        self.assertEqual(rules_of({"s/a/SKILL.md": over}, AS), ["S9"])
-        self.assertEqual(rules_of({"s/a/SKILL.md": "---\nname: a\n---\n"}, AS), ["S9"])
-        self.assertEqual(rules_of({"s/a/SKILL.md": "---\nname: a\ndescription: '  '\n---\n"}, AS), ["S9"])
+        self.assertEqual(rules_of({"s/a/SKILL.md": ok}, BOTH), [])
+        self.assertEqual(rules_of({"s/a/SKILL.md": over}, BOTH), ["S9"])
+        self.assertEqual(rules_of({"s/a/SKILL.md": "---\nname: a\n---\n"}, BOTH), ["S9"])
+        self.assertEqual(rules_of({"s/a/SKILL.md": "---\nname: a\ndescription: '  '\n---\n"}, BOTH), ["S9"])
 
     def test_compatibility(self):
         head = "---\nname: a\ndescription: d\ncompatibility: "
-        self.assertEqual(rules_of({"s/a/SKILL.md": head + "x" * 500 + "\n---\n"}, AS), [])
-        self.assertEqual(rules_of({"s/a/SKILL.md": head + "x" * 501 + "\n---\n"}, AS), ["S10"])
-        self.assertEqual(rules_of({"s/a/SKILL.md": head + "''\n---\n"}, AS), ["S10"])
-        self.assertEqual(rules_of({"s/a/SKILL.md": head + "\n  requires: [x]\n---\n"}, AS), ["S10"])
+        self.assertEqual(rules_of({"s/a/SKILL.md": head + "x" * 500 + "\n---\n"}, BOTH), [])
+        self.assertEqual(rules_of({"s/a/SKILL.md": head + "x" * 501 + "\n---\n"}, BOTH), ["S10"])
+        self.assertEqual(rules_of({"s/a/SKILL.md": head + "''\n---\n"}, BOTH), ["S10"])
+        self.assertEqual(rules_of({"s/a/SKILL.md": head + "\n  requires: [x]\n---\n"}, BOTH), ["S10"])
 
     def test_keys_outside_the_six_of_the_spec(self):
         text = "---\nname: a\ndescription: d\nargument-hint: x\nversion: 1\n---\n"
-        found, _, doc = lint({"s/a/SKILL.md": text}, AS)
+        found, _, doc = lint({"s/a/SKILL.md": text}, BOTH)
         self.assertEqual(found, [("s/a/SKILL.md", 4, "S11")])
         self.assertIn("argument-hint, version", doc["findings"][0]["message"])
 
@@ -213,7 +226,7 @@ class AgentSkillsGroupTest(unittest.TestCase):
         self.assertNotIn("Claude Code loads", doc["findings"][0]["message"])
 
     def test_invalid_yaml_is_reported_for_agentskills_alone_too(self):
-        self.assertEqual(rules_of({"s/a/SKILL.md": "---\nname: a\ndescription: a: b\n---\n"}, AS), ["S1"])
+        self.assertEqual(rules_of({"s/a/SKILL.md": "---\nname: a\ndescription: a: b\n---\n"}, BOTH), ["S1"])
 
 
 class DiscoveryAndConfigTest(unittest.TestCase):
@@ -232,22 +245,36 @@ class DiscoveryAndConfigTest(unittest.TestCase):
         only_limit = '[[rules.R1b.limits]]\nglob = "**/SKILL.md"\nmax_lines = 200\n'
         self.assertEqual({rule for _, _, rule in lint(files, extra=only_limit)[0]}, {"S1"})
 
-    def test_unknown_target_fails(self):
-        root = make_repo({"s/a/SKILL.md": GOOD, ".agentfile-lint.toml": '[skills]\ntargets = ["claude.ai"]\n'})
-        r = run_new(root)
-        self.assertEqual(r.returncode, 2)
-        self.assertIn("skills.targets[0]", r.stderr)
-        self.assertIn("agentskills, claude-code", r.stderr)
-
-    def test_unknown_key_fails(self):
-        r = run_new(make_repo({".agentfile-lint.toml": '[skills]\ntarget = ["agentskills"]\n'}))
+    def test_skills_table_is_not_a_config_key(self):
+        # Readers are chosen with presets and levels (docs/adr/0007), not a `[skills]` table.
+        r = run_new(make_repo({"s/a/SKILL.md": GOOD, ".agentfile-lint.toml": '[skills]\ntargets = ["agentskills"]\n'}))
         self.assertEqual(r.returncode, 2, r.stdout)
-        self.assertIn("skills: unknown key(s) target", r.stderr)
+        self.assertIn("config: unknown key(s) skills", r.stderr)
 
-    def test_empty_targets_or_skill_globs_turn_the_family_off(self):
+    def test_empty_skill_globs_turn_the_family_off(self):
         files = {"s/a/SKILL.md": "---\n- x\n---\n"}
-        self.assertEqual(rules_of(files, "targets = []"), [])
         self.assertEqual(rules_of(files, extra="[discover]\nskill_globs = []\n"), [])
+
+    def test_a_level_alone_turns_an_agentskills_id_on(self):
+        text = "---\nname: a\ndescription: d\nversion: 1\n---\n"
+        self.assertEqual(rules_of({"s/a/SKILL.md": text}), [])
+        self.assertEqual(rules_of({"s/a/SKILL.md": text}, extra='[rules.S11]\nlevel = "warn"\n'), ["S11"])
+        # and a preset id can be turned off again
+        self.assertEqual(rules_of({"s/a/SKILL.md": text}, BOTH, '[rules.S11]\nlevel = "off"\n'), [])
+
+    def test_an_override_can_raise_an_agentskills_id(self):
+        extra = '[[overrides]]\npaths = ["s/**"]\nrules = { S11 = "warn" }\nraise = true\nreason = "uploaded"\n'
+        text = "---\nname: a\ndescription: d\nversion: 1\n---\n"
+        self.assertEqual(lint({"s/a/SKILL.md": text}, "", extra)[0], [("s/a/SKILL.md", 4, "S11")])
+
+    def test_preset_agentskills_combines_with_strict(self):
+        text = "---\nname: a\ndescription: d\nversion: 1\n---\n"
+        both = 'extends = ["preset:strict", "preset:agentskills"]\n'
+        self.assertEqual(rules_of({"s/a/SKILL.md": text}, both), ["S11"])
+        root = make_repo({".agentfile-lint.toml": both})
+        doc = json.loads(run_new(root, "config", "--format", "json").stdout)
+        self.assertEqual(doc["rules"]["S11"]["level"], "warn")
+        self.assertEqual(doc["rules"]["R4b"]["level"], "warn")   # from preset:strict
 
     def test_a_skill_file_named_on_the_command_line_triggers_the_run(self):
         # argv names decide whether to run at all; a SKILL.md name is relevant (0.9.0 fix, step 3).
@@ -255,17 +282,13 @@ class DiscoveryAndConfigTest(unittest.TestCase):
         r = run_new(root, "--format", "json", "s/a/SKILL.md")
         self.assertEqual([f["rule"] for f in json.loads(r.stdout)["findings"]], ["S1"])
 
-    def test_targets_cannot_be_bypassed_by_an_override(self):
-        extra = '[[overrides]]\npaths = ["s/**"]\nrules = { S11 = "warn" }\nreason = "try"\n'
-        text = "---\nname: a\ndescription: d\nversion: 1\n---\n"
-        found, _, _ = lint({"s/a/SKILL.md": text}, None, extra)
-        self.assertEqual(found, [])
-
-    def test_effective_config_shows_skills(self):
+    def test_effective_config_shows_the_skill_ids(self):
         root = make_repo({})
         r = run_new(root, "config", "--format", "json")
         doc = json.loads(r.stdout)
-        self.assertEqual(doc["skills"], {"targets": ["claude-code"]})
+        self.assertNotIn("skills", doc)
+        self.assertEqual(doc["rules"]["S3"], {"level": "warn", "max_chars": 1536})
+        self.assertEqual([doc["rules"][f"S{i}"]["level"] for i in range(5, 12)], ["off"] * 7)
         self.assertEqual(doc["discover"]["skill_globs"], ["**/SKILL.md"])
         self.assertEqual(doc["discover"]["extend_skill_globs"], [])
 
@@ -285,7 +308,7 @@ class DiscoveryAndConfigTest(unittest.TestCase):
             '[[allowlist.entries]]\nrule = "S4"\npath = "s/a/SKILL.md"\ncount = 1\n'
             'reason = "client metadata"\nexpires = 2026-12-01\n'
         )
-        found, _, _ = lint({"s/a/SKILL.md": "---\nmetadata: [x]\n---\n"}, None, extra)
+        found, _, _ = lint({"s/a/SKILL.md": "---\nmetadata: [x]\n---\n"}, "", extra)
         self.assertEqual(found, [])
 
     def test_two_names_for_one_skill_file_in_a_directory_are_analyzed_once(self):
