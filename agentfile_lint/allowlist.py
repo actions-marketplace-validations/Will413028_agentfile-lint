@@ -5,6 +5,9 @@ below `count` (docs/adr/0005). n > count suppresses nothing and fails, so a new 
 hidden under an old exception; n < count fails asking to lower the count; n = 0 fails as no longer
 needed; an expired entry fails and suppresses nothing. Exceptions can only shrink.
 
+Those notes have the level of the entry's rule on the entry's path (`off` counts as `warn`), so an
+entry is never stricter than the rule it excepts: listing a warning's known findings cannot fail a run.
+
 Fixes (docs/design.md, Fixes), only for entries written in the config file the run loads: lowering
 `count` to n, and removing an entry whose file no longer violates the rule. Both are safe, and both
 only shrink an exception. Nothing else is fixed: n > count is a new violation, an expired entry needs
@@ -16,7 +19,7 @@ from __future__ import annotations
 import datetime
 import tomllib
 from dataclasses import dataclass
-from typing import Any, NamedTuple
+from typing import Any, Callable, NamedTuple
 
 from . import fix, toml_edit
 from .errors import ConfigError, check_keys, expect_int, expect_str
@@ -147,12 +150,16 @@ def apply(
     today: datetime.date,
     editable: Editable | None = None,
     readable: set[str] | None = None,
+    *,
+    level_of: Callable[[str, str], str],
 ) -> list[Finding]:
     """Drop findings covered by a live entry; add findings about the entries themselves.
 
     `present` is the full set of analyzed paths (decision: always the full set, never argv).
     `editable` is the config file the run loads when `entries` are written in it (entries from a file
     it extends get no fix); `readable` the analyzed paths whose text the rules saw (default: all).
+    `level_of(rule, path)` is the highest level a finding of `rule` can have on `path` (error | warn |
+    off): the level of the entry's notes, where `off` gives `warn`.
     """
     editor = _Editor(editable, len(entries)) if editable is not None else None
     found: dict[tuple[str, str], int] = {}
@@ -174,17 +181,20 @@ def apply(
     for index, e in enumerate(entries):
         days = (e.expires - today).days
         n = found.get((e.rule, e.path), 0)
+        # An entry is never stricter than its rule on its path (an entry for a rule that is off warns).
+        level = "error" if level_of(e.rule, e.path) == "error" else "warn"
         if days < 0:
             notes.append(Finding(
                 e.path, 0, RULE_ID,
                 f"entry for {e.rule} expired on {e.expires} ({-days} days ago); fix the file or renew with a new reason",
+                level=level,
             ))
             continue
         if n == 0:
             fixed = e.path in present
             why = f"file no longer violates {e.rule}" if fixed else "file is not an analyzed file"
             notes.append(Finding(e.path, 0, RULE_ID, f"entry for {e.rule} is no longer needed ({why}); remove it",
-                                 fix=editor.remove(index) if editor and index in removable else None))
+                                 level=level, fix=editor.remove(index) if editor and index in removable else None))
             continue
         if n > e.count:
             # The new findings cannot be told apart from the accepted ones, so all are reported.
@@ -192,6 +202,7 @@ def apply(
                 e.path, 0, RULE_ID,
                 f"entry for {e.rule} has count {e.count} but the file has {_findings(n)}; none is suppressed, "
                 f"fix the file down to {e.count} or fewer",
+                level=level,
             ))
         else:
             covered.add((e.rule, e.path))
@@ -199,7 +210,7 @@ def apply(
                 notes.append(Finding(
                     e.path, 0, RULE_ID,
                     f"entry for {e.rule} has count {e.count} but the file has {_findings(n)}; lower count to {n}",
-                    fix=editor.lower(index, n) if editor else None,
+                    level=level, fix=editor.lower(index, n) if editor else None,
                 ))
         if days <= settings.warn_days:
             notes.append(Finding(

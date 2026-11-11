@@ -259,11 +259,16 @@ Each entry: `rule`, `path`, `count`, `reason`, `expires` (docs/adr/0005).
 - `count` (required, an integer of at least 1) is the number of findings of that rule in that file the
   entry accepts. With n findings of that rule in that file after overrides:
   - n = count: a live entry suppresses all of them.
-  - n > count: none is suppressed, and an error reports that the entry expected `count` and found n.
-  - 0 < n < count: all are suppressed, and an error asks to lower `count` to n.
-  - n = 0 (the file does not violate the rule, or is not an analyzed file): error, no longer needed.
-- Expired (`expires` before today): error, and the findings are not suppressed. An entry that
+  - n > count: none is suppressed, and a note reports that the entry expected `count` and found n.
+  - 0 < n < count: all are suppressed, and a note asks to lower `count` to n.
+  - n = 0 (the file does not violate the rule, or is not an analyzed file): a note, no longer needed.
+- Expired (`expires` before today): a note, and the findings are not suppressed. An entry that
   expires today is still live.
+- The level of those notes is the level of the entry's rule on that path after overrides, so an entry
+  is never stricter than the rule it excepts; `off` gives `warn`, and so does R6, whose findings are
+  warnings at any level. An entry for `E0` is always an error. `--warn-as-error` raises them like any
+  warning. An entry for a rule at `error` still fails when it is no longer needed, also for a path that
+  is not an analyzed file: exceptions to an error are kept current.
 - Within `warn_days` (default 14) of expiry: warning "expires in N days".
 - `max_days` (default 90): an `expires` later than today plus `max_days` fails the configuration.
 - `max_entries` (default 10): more entries fail the configuration.

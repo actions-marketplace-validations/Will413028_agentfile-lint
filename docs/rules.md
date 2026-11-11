@@ -60,7 +60,7 @@ new ids.
 | [M2](#m1-to-m4-mcpjson) | `mcp-servers` | servers sit under an `mcpServers` object | objective | warn | same |
 | [M3](#m1-to-m4-mcpjson) | `mcp-type` | every server entry is an object with a documented `type` | objective | warn | same |
 | [M4](#m1-to-m4-mcpjson) | `mcp-required` | every server has `command` (stdio) or `url` | objective | warn | same |
-| [allowlist](#allowlist) | — | exceptions are current and still needed | objective | error | error |
+| [allowlist](#allowlist) | — | exceptions are current and still needed | objective | as the entry's rule | same |
 | [disable](#disable) | — | per-line directives are well formed and still needed | objective | error | error |
 
 ## How the rates were measured
@@ -258,7 +258,10 @@ did not recognize as the import. 0.5.0 with `preset:strict` reports 26 of them.
 
 Why: a debt exception without an end date becomes permanent without anyone deciding so. Every allowlist
 entry has a reason and an expiry date at most `max_days` (90) ahead; an expired entry, or one that no
-longer suppresses anything, fails. A path that is meant to differ for good goes in `[[overrides]]`
+longer suppresses anything, fails. "Fails" means at the level of the entry's rule on that file: an
+entry for a rule at `error` is an error, an entry for a rule at `warn` (or `off`, or for R6, which
+only warns) is a warning, so listing a warning's known findings never turns that warning into a
+failed run. A path that is meant to differ for good goes in `[[overrides]]`
 instead, with a required reason; each glob of an override that matches no analyzed file is
 a warning on the config file that wrote it (an inherited one is removed with `unset`), so a stale
 override shows up without failing CI unless `--warn-as-error` is given.

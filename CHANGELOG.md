@@ -5,6 +5,17 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed (breaking)
+
+- The `allowlist` notes about an entry (more or fewer findings than `count`, no longer needed,
+  expired) now have the level of the entry's rule on that path after overrides instead of always
+  `error`; `off` gives `warning`, and so does R6, whose findings are warnings at any level. Before,
+  an entry for a rule at `warn` failed the run (exit 1) as soon as its count was off, although the
+  rule itself never did. Entries for rules at `error` (R6 aside) and for `E0` are unchanged, and so
+  is what an entry suppresses. A run that
+  relied on such an entry failing now needs `--warn-as-error` or the rule at `error`
+  (docs/adr/0005, Amendment).
+
 ## [0.9.0] - 2026-11-06
 
 ### Added

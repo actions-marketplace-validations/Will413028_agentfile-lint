@@ -1,6 +1,6 @@
 # ADR 0005: One rule id per check, and allowlist entries that count
 
-Status: accepted. Amends decision 4 of ADR 0004 ("existing ids are not renamed") and decision 3 of
+Status: accepted; the level of decision 4's errors is changed by the Amendment below. Amends decision 4 of ADR 0004 ("existing ids are not renamed") and decision 3 of
 ADR 0001 (the keys of an allowlist entry). Implemented in 0.7.0.
 
 ## Context
@@ -93,3 +93,23 @@ Revisit when:
   reports it: reconsider `max_entries`.
 - Users ask to name the whole old group at once: consider a group selector in addition to the ids,
   never as an alias.
+
+## Amendment (after 0.9.0): an entry's notes have the level of its rule
+
+Decision 4 made every count mismatch an error, and "no longer needed" and "expired" were errors
+before it. For a rule at `warn` that made the exception stricter than the rule: a file with two
+accepted warnings and an entry with `count = 2` failed the run on a third warning, or on the day one
+was fixed, while the same file without the entry only printed warnings. A repository that used an
+entry to keep known warnings quiet got a commit blocker instead, and the way out was to delete the
+entry and let the warnings print on every run.
+
+Changed: the notes an entry produces (n > count, n < count, no longer needed, expired) take the level
+of the entry's rule on that path after overrides, where `off` gives `warn`, and so does a rule whose
+findings are warnings at any level (R6). An entry for `E0` stays an error. What is suppressed does not change: n > count and an expired entry still
+suppress nothing, so a new finding is never hidden.
+
+Rejected: refusing entries for rules at `warn` (a config error). The counted entry is the only way
+to say "these two are known, show me the third"; an override to `off` hides the third as well.
+
+Cost: for a rule at `warn`, a stale or miscounted entry no longer fails CI unless `--warn-as-error`
+is given. That is the same cost the rule's own findings already have.

@@ -17,6 +17,7 @@ ID = "R6"
 NAME = "constants"
 DESCRIPTION = "candidate constants copied from code into prose (always a warning)"
 CHECKS = ((ID, NAME, DESCRIPTION),)
+WARN_ONLY = (ID,)  # findings are warnings at any level; the engine reads it for allowlist notes
 
 
 def validate(shared: None, tables: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:

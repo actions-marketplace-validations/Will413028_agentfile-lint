@@ -60,7 +60,7 @@ services/api/AGENTS.md:5: warning: R6: possible copied constant '`MAX_RETRIES = 
 | `C1` | off | warn | `CLAUDE.md` is only the line `@AGENTS.md` (`import-only`) or absent (`forbid`) |
 | `S1`–`S4`, `S12` | warn | warn | `SKILL.md` for Claude Code: frontmatter is valid YAML, under 500 lines, `description` plus `when_to_use` within `[rules.S3] max_chars` (1536), `metadata` is a map, no character Claude Code refuses in `name` or the directory name |
 | `S5`–`S11` | off | off | `SKILL.md` for claude.ai upload and the Skills API (`preset:agentskills`, below): frontmatter present, `name` and `description` limits, `name` equals its directory, only the specification's six keys |
-| `allowlist` | error | error | exceptions: expired, no-longer-needed or miscounted (`count` above or below the findings) allowlist entries fail, entries warn before they expire; an override glob that matches no file warns |
+| `allowlist` | as the entry's rule | as the entry's rule | exceptions: expired, no-longer-needed or miscounted (`count` above or below the findings) allowlist entries fail when their rule is an `error` on that file and warn when it is `warn` or `off`; entries warn before they expire; an override glob that matches no file warns |
 | `disable` | error | error | per-line directives: a malformed one fails, one that suppresses nothing warns |
 
 Every rule except `R1a` and `R1c` ships at `warn` or `off`; raise a rule to `error` in your own config once it is
@@ -123,7 +123,7 @@ documented" means the documentation does not say, not that the feature is missin
 | Runs on | Python 3.11+, nothing to install (standard library plus a vendored copy of PyYAML) | Rust binary (npm, brew, pip, cargo) | Node (`npx`), no runtime dependencies | Node 18+ (`npx`) |
 | Files | `AGENTS.md`, `CLAUDE.md`, `.claude/rules/`, `SKILL.md`, hooks, MCP; others by glob | `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, hooks, MCP, Cursor, Copilot, more | context files of 16 tools, MCP config | `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, Cursor, Copilot, more |
 | Shared config | `extends` presets and files | `extend` base files | not documented | `extends` of the built-in preset |
-| Exceptions | allowlist entries need a reason and an expiry date, expired or unneeded entries fail; path overrides need a reason and raise a level only with `raise = true`; per-line directives need a reason, unused ones warn | disabled rules, per-file overrides, inline comments | ignored rules with an optional reason; unused ones reported | ignored paths |
+| Exceptions | allowlist entries need a reason and an expiry date, expired or unneeded entries fail (warn, for a rule at `warn`); path overrides need a reason and raise a level only with `raise = true`; per-line directives need a reason, unused ones warn | disabled rules, per-file overrides, inline comments | ignored rules with an optional reason; unused ones reported | ignored paths |
 | Vendored copy | reproducible directory with a hash check | not documented | not documented | not documented |
 | References checked | test names, `§N` spec sections; paths with `preset:strict` | import paths, commands, referenced files | paths, commands (against `package.json`, `Makefile`) | file references, imports |
 | Duplicates between files | identical lines in a file and its ancestors | not documented | duplicate content across files | duplicate content; across files not documented |
@@ -218,7 +218,7 @@ max_days = 90
 [[allowlist.entries]]
 rule = "R1a"
 path = "docs/AGENTS.md"
-count = 1  # findings of R1a in that file; more or fewer fail
+count = 1  # findings of R1a in that file; more or fewer fail (warn, for a rule at warn)
 reason = "split planned in the tracker"
 expires = 2026-12-31
 

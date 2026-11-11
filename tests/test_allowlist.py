@@ -34,10 +34,11 @@ class AllowlistTest(unittest.TestCase):
         files = {"AGENTS.md": dup + other, "sub/AGENTS.md": dup + other}
         toml = entry(rule="R5a", path="sub/AGENTS.md", expires="2026-08-01", count=1)
         r = run(files, toml)
-        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        # R5a is a warning, so the entry's own note is one too.
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("sub/AGENTS.md:1: warning: R5a:", r.stdout)
         self.assertIn("sub/AGENTS.md:2: warning: R5a:", r.stdout)
-        self.assertIn("has count 1 but the file has 2 findings", r.stdout)
+        self.assertIn("sub/AGENTS.md: warning: allowlist: entry for R5a has count 1 but the file has 2 findings", r.stdout)
 
     def test_fewer_findings_than_count_suppresses_and_asks_to_lower(self):
         r = run({"AGENTS.md": BIG}, entry(expires="2026-08-01", count=3))
@@ -133,8 +134,124 @@ class AllowlistTest(unittest.TestCase):
         s = allowlist.Settings(90, 10, 14)
         today = datetime.date(2026, 6, 1)
         e = allowlist.Entry("R1d", "a/AGENTS.md", 1, "why", datetime.date(2026, 5, 31))
-        out = allowlist.apply([], [e], s, {"a/AGENTS.md"}, today)
+        out = allowlist.apply([], [e], s, {"a/AGENTS.md"}, today, level_of=lambda rule, path: "error")
         self.assertEqual([f.rule for f in out], ["allowlist"])
+
+
+WARN_LINE = "[rules.R1d]\nlevel = \"warn\"\nmax_chars = 500\n"
+OFF_LINE = "[rules.R1d]\nlevel = \"off\"\nmax_chars = 500\n"
+
+
+def override(level, raise_=False):
+    extra = "raise = true\n" if raise_ else ""
+    return f'[[overrides]]\npaths = ["AGENTS.md"]\nrules = {{ R1d = "{level}" }}\nreason = "scope"\n{extra}'
+
+
+def run_with(rule_line, files, toml, *extra):
+    root = helpers.make_repo({**files, ".agentfile-lint.toml": rule_line + toml})
+    return helpers.run_new(root, "--today", TODAY, *extra)
+
+
+class EntryLevelTest(unittest.TestCase):
+    """An entry's own notes have the level of its rule on its path: an entry is never stricter than
+    the rule it excepts."""
+
+    def test_more_than_count_on_a_warn_rule_is_a_warning(self):
+        r = run_with(WARN_LINE, {"AGENTS.md": BIG + BIG}, entry(expires="2026-08-01", count=1))
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("AGENTS.md:1: warning: R1d:", r.stdout)
+        self.assertIn("AGENTS.md:2: warning: R1d:", r.stdout)
+        self.assertIn("AGENTS.md: warning: allowlist: entry for R1d has count 1 but the file has 2 findings", r.stdout)
+
+    def test_fewer_than_count_on_a_warn_rule_is_a_warning(self):
+        r = run_with(WARN_LINE, {"AGENTS.md": BIG}, entry(expires="2026-08-01", count=3))
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNotIn("R1d: line is", r.stdout)
+        self.assertIn("AGENTS.md: warning: allowlist: entry for R1d has count 3 but the file has 1 finding; lower count to 1", r.stdout)
+
+    def test_unneeded_entry_on_a_warn_rule_is_a_warning(self):
+        r = run_with(WARN_LINE, {"AGENTS.md": "fine\n"}, entry(expires="2026-08-01"))
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("AGENTS.md: warning: allowlist: entry for R1d is no longer needed", r.stdout)
+
+    def test_expired_entry_on_a_warn_rule_is_a_warning_and_does_not_suppress(self):
+        r = run_with(WARN_LINE, {"AGENTS.md": BIG}, entry(expires="2026-05-31"))
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("AGENTS.md: warning: allowlist: entry for R1d expired on 2026-05-31", r.stdout)
+        self.assertIn("AGENTS.md:1: warning: R1d: line is 600 characters, limit 500", r.stdout)
+
+    def test_warn_as_error_promotes_the_entry_notes_of_a_warn_rule(self):
+        r = run_with(WARN_LINE, {"AGENTS.md": BIG + BIG}, entry(expires="2026-08-01", count=1), "--warn-as-error")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("AGENTS.md: error: allowlist: entry for R1d has count 1", r.stdout)
+
+    def test_entry_for_a_rule_that_is_off_is_an_unneeded_warning(self):
+        r = run_with(OFF_LINE, {"AGENTS.md": BIG}, entry(expires="2026-08-01"))
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("AGENTS.md: warning: allowlist: entry for R1d is no longer needed", r.stdout)
+
+    def test_override_that_lowers_the_rule_on_the_path_lowers_the_notes(self):
+        for files, count, expect in (
+            ({"AGENTS.md": BIG + BIG}, 1, "has count 1 but the file has 2 findings"),
+            ({"AGENTS.md": "fine\n"}, 1, "is no longer needed"),
+        ):
+            with self.subTest(expect=expect):
+                r = run_with(R1_LINE, files, entry(expires="2026-08-01", count=count) + override("warn"))
+                self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+                self.assertIn(f"AGENTS.md: warning: allowlist: entry for R1d {expect}", r.stdout)
+
+    def test_override_that_raises_the_rule_on_the_path_raises_the_notes(self):
+        for files, count, expect in (
+            ({"AGENTS.md": BIG + BIG}, 1, "has count 1 but the file has 2 findings"),
+            ({"AGENTS.md": "fine\n"}, 1, "is no longer needed"),
+        ):
+            with self.subTest(expect=expect):
+                r = run_with(WARN_LINE, files, entry(expires="2026-08-01", count=count) + override("error", True))
+                self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+                self.assertIn(f"AGENTS.md: error: allowlist: entry for R1d {expect}", r.stdout)
+
+    def test_entry_for_a_file_that_is_not_utf8_keeps_error_notes(self):
+        root = helpers.make_repo({"AGENTS.md": "fine\n", ".agentfile-lint.toml": entry(rule="E0", expires="2026-08-01", count=2)})
+        (root / "AGENTS.md").write_bytes(b"\xff\xfe bad\n")
+        r = helpers.run_new(root, "--today", TODAY)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("AGENTS.md: error: allowlist: entry for E0 has count 2 but the file has 1 finding", r.stdout)
+
+    def test_expired_entry_without_findings_on_a_warn_rule_is_a_warning(self):
+        r = run_with(WARN_LINE, {"AGENTS.md": "fine\n"}, entry(expires="2026-05-31"))
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("AGENTS.md: warning: allowlist: entry for R1d expired on 2026-05-31", r.stdout)
+
+    def test_unneeded_entry_for_a_missing_file_keeps_the_rule_level(self):
+        for line, rc, severity in ((R1_LINE, 1, "error"), (WARN_LINE, 0, "warning")):
+            with self.subTest(severity=severity):
+                r = run_with(line, {"AGENTS.md": "fine\n"}, entry(path="gone/AGENTS.md", expires="2026-08-01"))
+                self.assertEqual(r.returncode, rc, r.stdout + r.stderr)
+                self.assertIn(f"gone/AGENTS.md: {severity}: allowlist: entry for R1d is no longer needed", r.stdout)
+
+    def test_entry_for_a_rule_whose_findings_are_always_warnings_warns_at_error_level(self):
+        # R6 at `error` still only warns, so its entry's notes do too, with findings or without.
+        r6 = '[rules.R6]\nlevel = "error"\n'
+        for text in ("Retry at most MAX_RETRIES = 5 times.\nWait TIMEOUT_SECONDS = 30 between tries.\n", "fine\n"):
+            with self.subTest(text=text):
+                r = run_with(r6, {"AGENTS.md": text}, entry(rule="R6", expires="2026-08-01", count=1))
+                self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+                self.assertIn("AGENTS.md: warning: allowlist: entry for R6", r.stdout)
+                self.assertNotIn("error:", r.stdout)
+
+    def test_fix_lowers_the_count_of_a_warn_rule_entry(self):
+        root = helpers.make_repo({"AGENTS.md": BIG, ".agentfile-lint.toml": WARN_LINE + entry(expires="2026-08-01", count=3)})
+        r = helpers.run_new(root, "--today", TODAY, "--fix")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("count = 1\n", (root / ".agentfile-lint.toml").read_text())
+
+    def test_apply_unit_takes_the_level_from_level_of(self):
+        s = allowlist.Settings(90, 10, 14)
+        today = datetime.date(2026, 6, 1)
+        e = allowlist.Entry("R1d", "AGENTS.md", 1, "why", datetime.date(2026, 8, 1))
+        for given, expect in (("error", "error"), ("warn", "warn"), ("off", "warn")):
+            out = allowlist.apply([], [e], s, {"AGENTS.md"}, today, level_of=lambda rule, path: given)
+            self.assertEqual([f.level for f in out], [expect])
 
 
 class ApplyCountTest(unittest.TestCase):
@@ -144,7 +261,7 @@ class ApplyCountTest(unittest.TestCase):
     def apply(self, n, count, expires):
         e = allowlist.Entry("R1d", "a/AGENTS.md", count, "why", expires)
         fs = [allowlist.Finding("a/AGENTS.md", i + 1, "R1d", "x") for i in range(n)]
-        return allowlist.apply(fs, [e], self.S, {"a/AGENTS.md"}, self.TODAY)
+        return allowlist.apply(fs, [e], self.S, {"a/AGENTS.md"}, self.TODAY, level_of=lambda rule, path: "error")
 
     def test_expired_entry_suppresses_nothing_even_within_count(self):
         out = self.apply(1, 2, datetime.date(2026, 5, 31))

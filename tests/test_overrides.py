@@ -63,8 +63,9 @@ class ScopeTest(unittest.TestCase):
         entry = ('[[allowlist.entries]]\nrule = "R5b"\npath = "docs/zh/AGENTS.md"\ncount = 1\nreason = "r"\n'
                  'expires = 2026-07-01\n')
         r = run({**TRANSLATED, ".agentfile-lint.toml": STRICT + OFF_DOCS.format(rules='R5b = "off"') + entry})
-        self.assertIn("docs/zh/AGENTS.md: error: allowlist: entry for R5b is no longer needed", r.stdout)
-        self.assertEqual(r.returncode, 1)
+        # A warning: R5b is off on that path, and an entry's notes follow its rule's level there.
+        self.assertIn("docs/zh/AGENTS.md: warning: allowlist: entry for R5b is no longer needed", r.stdout)
+        self.assertEqual(r.returncode, 0)
 
 
 class ValidationTest(unittest.TestCase):

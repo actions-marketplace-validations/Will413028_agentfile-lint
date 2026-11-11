@@ -84,8 +84,9 @@ class SymlinkAliasTest(unittest.TestCase):
     def test_allowlist_entry_for_an_alias_is_no_longer_needed(self):
         entry = '[[allowlist.entries]]\nrule = "R1b"\npath = "CLAUDE.md"\ncount = 1\nreason = "split later"\nexpires = 2026-06-30\n'
         rc, lines = lint({"AGENTS.md": LONG}, {"CLAUDE.md": "AGENTS.md"}, entry)
-        self.assertEqual(rc, 1)
-        self.assertIn("is no longer needed (file is not an analyzed file)", "\n".join(on("CLAUDE.md", lines)))
+        self.assertEqual(rc, 0)  # R1b is a warning, so its entry's note is one too
+        self.assertIn("warning: allowlist: entry for R1b is no longer needed (file is not an analyzed file)",
+                      "\n".join(on("CLAUDE.md", lines)))
 
 
 if __name__ == "__main__":
