@@ -84,7 +84,7 @@ symlink to a file outside the discovered set is analyzed as its own file; a dang
 scan never switches scope on its own.
 ### File families
 
-Each rule module checks one family of files, and each family has its own glob lists:
+Each rule module checks one family of files, and each family has its own glob lists (docs/adr/0009):
 
 | Family | Globs | Default | Rules |
 |---|---|---|---|
@@ -299,7 +299,7 @@ weekly schedule so warnings appear before that happens.
 
 ## Fixes
 
-A finding may carry a fix: edits to file text, marked `safe` or `unsafe` as ruff does. The checker
+A finding may carry a fix: edits to file text, marked `safe` or `unsafe` as ruff does (docs/adr/0009). The checker
 writes nothing unless asked: `--fix` applies the safe fixes and then reports the findings that are
 left, `--unsafe-fixes` (only with `--fix` or `--diff`) adds the unsafe ones, and `--diff` prints the
 same edits as a unified diff without writing (split at LF, as `git apply` reads it). Exit codes keep
