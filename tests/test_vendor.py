@@ -1,4 +1,3 @@
-import getpass
 import os
 import re
 import shutil
@@ -11,10 +10,13 @@ from pathlib import Path
 import helpers
 
 ENTRY = "agentfile-lint.py"
+# The copy is made under this account name: whoever runs the tests, the name to look for is the same,
+# and it is no word that the copied files could contain by chance.
+ACCOUNT = "zq-vendoring-account"
 
 
 def vendor(dest, *extra):
-    env = dict(os.environ, PYTHONPATH=str(helpers.REPO))
+    env = dict(os.environ, PYTHONPATH=str(helpers.REPO), LOGNAME=ACCOUNT, USER=ACCOUNT, USERNAME=ACCOUNT)
     return subprocess.run(
         [sys.executable, "-m", "agentfile_lint", "vendor", "--to", str(dest),
          "--ref-tag", "v9.9.9", "--ref-commit", "a" * 40, *extra],
@@ -75,16 +77,12 @@ class VendorTest(unittest.TestCase):
         self.assertIn("pull request diff is the review point", readme)
         self.assertIn("keeps no\nupgrade script", readme)
         blob = b"\n".join(files.values())
-        for needle in (str(self.tmp), str(helpers.REPO), tempfile.gettempdir()):
+        for needle in (str(self.tmp), str(helpers.REPO), tempfile.gettempdir(), str(Path.home()), ACCOUNT):
             self.assertNotIn(needle.encode(), blob, needle)
-        # The vendored PyYAML is byte-identical to upstream (checked above); its English prose may
-        # contain any short word, so the user-name and timestamp checks cover only our own files
-        # (PROVENANCE is ours).
+        # The vendored PyYAML is byte-identical to upstream (checked above); its prose may mention a
+        # time, so the timestamp check covers only our own files (PROVENANCE is ours).
         upstream = {n for n in files if n.startswith("agentfile_lint/_yaml/") and not n.endswith("/PROVENANCE")}
         own = b"\n".join(c for n, c in files.items() if n not in upstream)
-        for who in {getpass.getuser(), os.environ.get("USER", "")} - {""}:
-            if len(who) > 3:
-                self.assertNotIn(who.encode(), own, who)
         self.assertIsNone(re.search(rb"\b20\d\d-\d\d-\d\d[T ]\d\d:\d\d", own))
 
     def test_verify_passes(self):

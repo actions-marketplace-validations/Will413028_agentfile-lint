@@ -122,7 +122,8 @@ class ConfigTest(unittest.TestCase):
             "duplicates": {"ancestor_pairs": "same-name", "min_chars": 40, "ignore_headings": True, "ignore_patterns": [], "exclude": []},
         })
         self.assertEqual(list(doc["rules"]), sorted(["R1a", "R1b", "R1c", "R1d", "R1e", "R2", "R3a", "R3b", "R3c", "R4a", "R4b", "R5a", "R5b", "R6", "C1"]
-                                                    + [f"S{i}" for i in range(1, 13)] + [f"H{i}" for i in range(1, 7)]
+                                                    + [f"S{i}" for i in range(1, 15)] + [f"H{i}" for i in range(1, 7)]
+                                                    + [f"P{i}" for i in range(1, 6)]
                                                     + [f"M{i}" for i in range(1, 5)]))
         self.assertEqual(doc["rules"]["R5b"], {"level": "off"})
 

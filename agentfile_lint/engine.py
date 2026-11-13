@@ -88,11 +88,12 @@ def run(
             stored[path] = raw  # read once, as stored (docs/design.md, R1a to R1d)
         except UnicodeDecodeError:
             findings.append(Finding(path, 0, INPUT_RULE, "file is not valid UTF-8"))
-    ctx = Context(root, files, {p: stored[p] for p in family_paths[INSTRUCTION] if p in stored})
-    texts = {INSTRUCTION: ctx.files} | {
+    others = {
         family: {p: normalize_newlines(stored[p]) for p in paths if p in stored}
         for family, paths in family_paths.items() if family != INSTRUCTION
     }
+    ctx = Context(root, files, {p: stored[p] for p in family_paths[INSTRUCTION] if p in stored}, others)
+    texts = {INSTRUCTION: ctx.files} | others
     for module in MODULES:
         base = {rule_id: config.rules[rule_id]["level"] for rule_id, _, _ in module.CHECKS}
         # A rule runs at the highest level a `raise` override can give it, so it has findings to raise.

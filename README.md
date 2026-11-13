@@ -60,6 +60,9 @@ services/api/AGENTS.md:5: warning: R6: possible copied constant '`MAX_RETRIES = 
 | `C1` | off | warn | `CLAUDE.md` is only the line `@AGENTS.md` (`import-only`) or absent (`forbid`) |
 | `S1`–`S4`, `S12` | warn | warn | `SKILL.md` for Claude Code: frontmatter is valid YAML, under 500 lines, `description` plus `when_to_use` within `[rules.S3] max_chars` (1536), `metadata` is a map, no character Claude Code refuses in `name` or the directory name |
 | `S5`–`S11` | off | off | `SKILL.md` for claude.ai upload and the Skills API (`preset:agentskills`, below): frontmatter present, `name` and `description` limits, `name` equals its directory, only the specification's six keys |
+| `S13` | off | warn | `SKILL.md` body within the 5,000 tokens Claude Code keeps of an invoked skill after compaction (estimated without a tokenizer) |
+| `S14` | warn | warn | a relative Markdown link in a `SKILL.md` body points to a tracked file or directory |
+| `P1`–`P5` | warn | warn | rule files in `.claude/rules/`: the frontmatter parses, `paths` is a glob or a list of globs, every pattern matches a tracked file, no look-alike key (`globs`) instead of `paths`, every list item is a string; each mistake silently loads the rule in every session or never |
 | `allowlist` | as the entry's rule | as the entry's rule | exceptions: expired, no-longer-needed or miscounted (`count` above or below the findings) allowlist entries fail when their rule is an `error` on that file and warn when it is `warn` or `off`; entries warn before they expire; an override glob that matches no file warns |
 | `disable` | error | error | per-line directives: a malformed one fails, one that suppresses nothing warns |
 
@@ -99,7 +102,7 @@ max_chars = 1536                   # Claude Code's default skillListingMaxDescCh
 ```
 
 `[discover] skill_globs` replaces the `SKILL.md` glob list and `extend_skill_globs` adds to it, as
-`globs` and `extend_globs` do for instruction files. Details: [`docs/rules.md`](docs/rules.md#s1-to-s12-skillmd).
+`globs` and `extend_globs` do for instruction files. Details: [`docs/rules.md`](docs/rules.md#s1-to-s14-skillmd).
 
 ### Hooks and MCP settings
 

@@ -3,7 +3,8 @@
 Each module exposes:
 - `CHECKS`: ((id, name, description), ...), one entry per rule id it reports. Every id has its own
   level; a finding carries the id of the check that produced it.
-- `WHOLE_FILE` (optional): ids whose findings are about a whole file; per-line directives reject them.
+- `WHOLE_FILE` (optional): ids whose findings are about a whole file or its frontmatter; per-line
+  directives reject them.
 - `SHARED` (optional): (group, keys), the `[shared.<group>]` table its ids share.
 - `FAMILY` (optional, default "instruction"): the file family `check` runs on, one of `FAMILIES`.
   Instruction files are `[discover] globs`; every other family is `[discover] <family>_globs`
@@ -13,15 +14,16 @@ Each module exposes:
   params and, for each of its ids, its effective `[rules.<id>]` table (defaults filled in; `level`
   is set from the merged table), which `Config.rules` and `config --format json` show.
 - `check(path, text, params, levels)` (one file, newlines normalized) and/or
-  `check_repo(ctx, params, levels)` (the whole tracked set); `levels` maps each of its ids to its level.
+  `check_repo(ctx, params, levels)` (the whole tracked set; a module of another family finds its
+  files in `ctx.family_files`); `levels` maps each of its ids to its level.
   The engine runs a module once unless all its ids are off and drops findings of an id that is off.
 Rules read parameters only; repo-specific behaviour is configuration, never a branch in code.
 """
 from __future__ import annotations
 
-from . import claude_md, constants, duplicate, hooks, mcp, paths, rot, shape, size, skill, specrefs, testnames
+from . import claude_md, constants, duplicate, hooks, mcp, paths, rot, rule_files, shape, size, skill, specrefs, testnames
 
-MODULES = (size, shape, testnames, paths, specrefs, rot, duplicate, constants, claude_md, skill, hooks, mcp)
+MODULES = (size, shape, testnames, paths, specrefs, rot, duplicate, constants, claude_md, rule_files, skill, hooks, mcp)
 
 # rule id -> its module, in report order.
 RULES = {rule_id: module for module in MODULES for rule_id, _, _ in module.CHECKS}

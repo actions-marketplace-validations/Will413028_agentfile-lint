@@ -223,10 +223,10 @@ mode = "import-only"
 import_line = "@AGENTS.md"
 
 # ---------------------------------------------------------------------------------------------
-# S1 to S12: SKILL.md (docs/rules.md, "S1 to S12 SKILL.md"; docs/adr/0007). Two readers read these
+# S1 to S14: SKILL.md (docs/rules.md, "S1 to S14 SKILL.md"; docs/adr/0007). Two readers read these
 # files differently; each id protects one or both:
-#   Claude Code: S1 to S4, S12 (on here)
-#   claude.ai upload, the Skills API and the Agent Skills specification: S1, S2, S5 to S11
+#   Claude Code: S1 to S4, S12, S14 (on here), S13 (an estimate: off here, on in preset:strict)
+#   claude.ai upload, the Skills API and the Agent Skills specification: S1, S2, S5 to S11, S14
 # S5 to S11 are off: Claude Code accepts what they report. A repository that uploads its skills adds
 # `extends = ["preset:agentskills"]`, or turns single ids on with their level.
 # ---------------------------------------------------------------------------------------------
@@ -265,6 +265,40 @@ level = "off"
 level = "off"
 
 [rules.S12]
+level = "warn"
+
+# S13: when Claude Code compacts a conversation it re-attaches each invoked skill but keeps only its
+# first 5,000 tokens (https://code.claude.com/docs/en/skills, "Skill content lifecycle"). The count
+# here is an estimate without a tokenizer (4 ASCII characters or 1 other character per token), so the
+# rule is off by default and a warning in preset:strict.
+[rules.S13]
+level = "off"
+max_tokens = 5000
+
+# S14: a relative Markdown link in a SKILL.md body whose target is not a tracked file or directory.
+[rules.S14]
+level = "warn"
+
+# ---------------------------------------------------------------------------------------------
+# P1 to P5: Claude Code rule files, the instruction files inside a `.claude/rules/` directory
+# (docs/rules.md, "P1 to P5 rule files"). A rule file loads in every session unless its frontmatter
+# has `paths`; each id reports a frontmatter that silently gives the other behaviour than the one
+# written. P4 `keys`: keys that are not `paths` but look like it (`Paths` in any case is always one).
+# ---------------------------------------------------------------------------------------------
+[rules.P1]
+level = "warn"
+
+[rules.P2]
+level = "warn"
+
+[rules.P3]
+level = "warn"
+
+[rules.P4]
+level = "warn"
+keys = ["path", "glob", "globs"]
+
+[rules.P5]
 level = "warn"
 
 # ---------------------------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-"""SKILL.md rules (S1 to S12), grouped by reader (docs/adr/0007, docs/rules.md "S1 to S12 SKILL.md")."""
+"""SKILL.md rules (S1 to S14), grouped by reader (docs/adr/0007, docs/rules.md "S1 to S14 SKILL.md")."""
 import json
 import unittest
 
@@ -323,6 +323,113 @@ class DiscoveryAndConfigTest(unittest.TestCase):
         root = make_repo({"s/a/SKILL.md": "---\n- x\n---\n"}, symlinks={"t/a/SKILL.md": "../../s/a/SKILL.md"})
         r = run_new(root, "--format", "json", "--today", "2026-11-06")
         self.assertEqual(sorted(f["file"] for f in json.loads(r.stdout)["findings"]), ["s/a/SKILL.md", "t/a/SKILL.md"])
+
+
+class LinksTest(unittest.TestCase):
+    """S14: a relative Markdown link in the body points to a tracked file or directory."""
+
+    SKILL = "skills/pdf/SKILL.md"
+
+    def found(self, body: str, **files: str):
+        files = {self.SKILL: GOOD + body, "skills/pdf/references/forms.md": "x\n", "skills/merge/SKILL.md":
+                 GOOD.replace("pdf", "merge"), "docs/My Guide.md": "x\n", **files}
+        return [(f, line) for f, line, rule in lint(files)[0] if rule == "S14"]
+
+    def test_links_to_tracked_files_and_directories_are_fine(self):
+        body = ("See [forms](references/forms.md), [the folder](references/), [merge](../merge/SKILL.md#usage),\n"
+                "[guide](../../docs/My%20Guide.md), [same](./references/forms.md?plain=1) and [here](.).\n")
+        self.assertEqual(self.found(body), [])
+
+    def test_missing_target_is_reported_on_its_line(self):
+        found, r, doc = lint({self.SKILL: GOOD + "\nRead [the rules](../../rules/react.md) and [a](references/gone.md).\n"})
+        self.assertEqual((found, r.returncode), ([(self.SKILL, 7, "S14")] * 2, 0))
+        self.assertIn("looked for rules/react.md", doc["findings"][0]["message"])
+
+    def test_missing_directory_and_wrong_case_are_reported(self):
+        self.assertEqual(self.found("[d](../absent/)\n[c](References/forms.md)\n"), [(self.SKILL, 6), (self.SKILL, 7)])
+
+    def test_file_named_as_a_directory_is_reported(self):
+        self.assertEqual(self.found("[d](references/forms.md/)\n"), [(self.SKILL, 6)])
+
+    def test_target_with_parentheses(self):
+        files = {"skills/pdf/references/api(v2).md": "x\n"}
+        self.assertEqual(self.found("[a](references/api(v2).md)\n[b](references/gone(v2).md)\n", **files), [(self.SKILL, 7)])
+
+    def test_below_a_tracked_symlink_or_a_skipped_directory_is_not_judged(self):
+        root = make_repo({self.SKILL: GOOD + "[a](shared/forms.md)\n[b](node_modules/x/README.md)\n[c](gone/x.md)\n[d](shared/)\n",
+                          "lib/forms.md": "x\n"}, symlinks={"skills/pdf/shared": "../../lib"})
+        doc = json.loads(run_new(root, "--format", "json").stdout)
+        self.assertEqual([(f["line"], f["rule"]) for f in doc["findings"]], [(8, "S14")])
+
+    def test_untracked_file_is_reported(self):
+        root = make_repo({self.SKILL: GOOD + "[notes](notes.md)\n"})
+        (root / "skills/pdf/notes.md").write_text("x\n")
+        self.assertIn("S14", run_new(root).stdout)
+
+    def test_what_is_not_a_repository_path_is_skipped(self):
+        body = ("[a](https://example.com/x.md) [b](mailto:a@example.com) [c](#usage) [d](/docs/x.md)\n"
+                "[e](url) [f]({baseDir}/x.md) [g](<path>/x.md) [h]($HOME/x.md) [i](../../../outside/x.md)\n"
+                "![image](missing.png) [![badge](missing.png)](https://example.com) \\[esc](gone.md)\n"
+                "[t]`c`(gone.md)\n")
+        self.assertEqual(self.found(body), [])
+
+    def test_code_and_frontmatter_are_not_read(self):
+        text = ("---\nname: pdf\ndescription: See [x](gone.md).\n---\n"
+                "Write `[text](gone.md)` like this:\n\n```md\n[text](gone.md)\n```\n<!-- [old](gone.md) -->\n")
+        self.assertEqual([r for _, _, r in lint({self.SKILL: text})[0]], [])
+
+    def test_fence_or_comment_opened_in_the_frontmatter_does_not_hide_the_body(self):
+        for opener in ("```", "use <!-- when"):
+            with self.subTest(opener=opener):
+                text = f"---\nname: pdf\ndescription: |\n  {opener}\n---\n[x](gone.md)\n"
+                self.assertEqual(lint({self.SKILL: text})[0], [(self.SKILL, 6, "S14")])
+
+    def test_link_with_a_title_and_two_links_on_a_line(self):
+        self.assertEqual(self.found('[a](gone.md "Title") and [b](references/forms.md) and [c](also/gone.md)\n'),
+                         [(self.SKILL, 6)] * 2)
+
+    def test_instruction_files_are_not_checked(self):
+        self.assertEqual(lint({"AGENTS.md": "See [x](gone.md).\n"})[0], [])
+
+    def test_level_and_alias(self):
+        files = {self.SKILL: GOOD + "[a](gone.md)\n"}
+        self.assertEqual(rules_of(files, '[rules.skill-links]\nlevel = "off"\n'), [])
+        self.assertEqual(lint(files, '[rules.S14]\nlevel = "error"\n')[1].returncode, 1)
+
+
+class CompactionTest(unittest.TestCase):
+    """S13: Claude Code keeps the first `max_tokens` tokens of an invoked skill after compaction."""
+
+    STRICT = 'extends = ["preset:strict"]\n'
+
+    def skill(self, body: str) -> dict[str, str]:
+        return {"s/pdf/SKILL.md": GOOD + body}
+
+    def test_off_by_default_and_a_warning_in_strict(self):
+        files = self.skill("word " * 5000)                       # 25,000 ASCII characters: about 6,250 tokens
+        self.assertEqual(rules_of(files), [])
+        found, r, doc = lint(files, self.STRICT)
+        self.assertEqual((found, r.returncode), ([("s/pdf/SKILL.md", None, "S13")], 0))
+        self.assertIn("about 6252 tokens", doc["findings"][0]["message"])
+        self.assertIn("first 5000 tokens", doc["findings"][0]["message"])
+
+    def test_estimate_counts_four_ascii_or_one_other_character_per_token(self):
+        from agentfile_lint.rules.skill import estimated_tokens
+        self.assertEqual([estimated_tokens(s) for s in ("", "a", "abcd", "abcde", "\u6587\u5b57", "ab\u6587")], [0, 1, 1, 2, 2, 2])
+
+    def test_limit_is_on_the_body_without_the_frontmatter(self):
+        config = self.STRICT + "[rules.S13]\nmax_tokens = 10\n"
+        long_description = "---\nname: pdf\ndescription: " + "d" * 400 + "\n---\n"
+        self.assertEqual(rules_of({"s/pdf/SKILL.md": long_description + "x" * 40 + "\n"}, config), [])
+        self.assertEqual(rules_of({"s/pdf/SKILL.md": long_description + "x" * 41 + "\n"}, config), ["S13"])
+        self.assertEqual(rules_of({"s/pdf/SKILL.md": "\u6587" * 10}, config), [])
+        self.assertEqual(rules_of({"s/pdf/SKILL.md": "\u6587" * 11}, config), ["S13"])
+
+    def test_max_tokens_must_be_a_positive_integer(self):
+        root = make_repo({"s/pdf/SKILL.md": GOOD, ".agentfile-lint.toml": "[rules.S13]\nmax_tokens = 0\n"})
+        r = run_new(root)
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("rules.S13.max_tokens", r.stderr)
 
 
 if __name__ == "__main__":

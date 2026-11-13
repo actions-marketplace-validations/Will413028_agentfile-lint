@@ -5,6 +5,24 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Rule-file rules P1 to P5, at `warn`, for the instruction files inside a `.claude/rules/` directory.
+  A mistake in a rule file's frontmatter is never an error in Claude Code; the rule silently loads in
+  every session or never. P1 (`rule-yaml`): the frontmatter does not parse, even after the second
+  attempt Claude Code makes. P2 (`rule-paths-type`): `paths` holds no pattern (a number, a boolean, a
+  mapping, empty). P3 (`rule-paths-match`): a `paths` pattern matches no tracked file. P4
+  (`rule-paths-key`): no `paths`, but a key that looks like it (`[rules.P4] keys`, default `path`,
+  `glob`, `globs`, and `paths` in another case). P5 (`rule-paths-item`): a `paths` list item is not a
+  string. Per-line directives cannot name them. Patterns are read as Claude Code reads them (docs/rules.md, "P1 to P5
+  rule files"; behaviour measured with Claude Code 2.1.323).
+- S14 (`skill-links`), at `warn`: an inline Markdown link in a `SKILL.md` body whose relative target is
+  not a tracked file or directory. On the 22-repository sample it reports 34 links in 3 repositories,
+  all real (docs/rules.md).
+- S13 (`skill-compaction-tokens`), `off` by default and `warn` in `preset:strict`: the body of a
+  `SKILL.md` is estimated at more than `[rules.S13] max_tokens` (5000) tokens, what Claude Code keeps
+  of each invoked skill after compaction. The count is an estimate without a tokenizer.
+
 ### Changed (breaking)
 
 - The `allowlist` notes about an entry (more or fewer findings than `count`, no longer needed,

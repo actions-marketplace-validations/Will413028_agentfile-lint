@@ -38,18 +38,25 @@ new ids.
 | [R5b](#r5a-and-r5b-duplicates) | `sibling-duplicates` | lines repeated in other files | heuristic | off | warn |
 | [R6](#r6-copied-constants) | `constants` | values copied from code | heuristic | off | warn |
 | [C1](#c1-claudemd) | `claude-md` | `CLAUDE.md` only imports `AGENTS.md` | convention | off | warn |
-| [S1](#s1-to-s12-skillmd) | `skill-yaml` | `SKILL.md` frontmatter is valid YAML and a mapping | objective | warn | same |
-| [S2](#s1-to-s12-skillmd) | `skill-lines` | `SKILL.md` has fewer than 500 lines | objective | warn | same |
-| [S3](#s1-to-s12-skillmd) | `skill-listing-chars` | `description` plus `when_to_use` fit `max_chars` (1536) | objective | warn | same |
-| [S4](#s1-to-s12-skillmd) | `skill-metadata-map` | `metadata` is a map | objective | warn | same |
-| [S5](#s1-to-s12-skillmd) | `skill-frontmatter` | `SKILL.md` has frontmatter | objective, for upload (`preset:agentskills`: warn) | off | off |
-| [S6](#s1-to-s12-skillmd) | `skill-name-length` | `name` is 1 to 64 characters | objective, for upload (`preset:agentskills`: warn) | off | off |
-| [S7](#s1-to-s12-skillmd) | `skill-name-chars` | `name` characters | objective, for upload (`preset:agentskills`: warn) | off | off |
-| [S8](#s1-to-s12-skillmd) | `skill-name-dir` | `name` equals the directory name | objective, for upload (`preset:agentskills`: warn) | off | off |
-| [S9](#s1-to-s12-skillmd) | `skill-description` | `description` is 1 to 1024 characters | objective, for upload (`preset:agentskills`: warn) | off | off |
-| [S10](#s1-to-s12-skillmd) | `skill-compatibility` | `compatibility` is 1 to 500 characters | objective, for upload (`preset:agentskills`: warn) | off | off |
-| [S11](#s1-to-s12-skillmd) | `skill-keys` | only the specification's six frontmatter keys | objective, for upload (`preset:agentskills`: warn) | off | off |
-| [S12](#s1-to-s12-skillmd) | `skill-name-refused` | no character Claude Code refuses in `name` or the directory name | objective | warn | same |
+| [S1](#s1-to-s14-skillmd) | `skill-yaml` | `SKILL.md` frontmatter is valid YAML and a mapping | objective | warn | same |
+| [S2](#s1-to-s14-skillmd) | `skill-lines` | `SKILL.md` has fewer than 500 lines | objective | warn | same |
+| [S3](#s1-to-s14-skillmd) | `skill-listing-chars` | `description` plus `when_to_use` fit `max_chars` (1536) | objective | warn | same |
+| [S4](#s1-to-s14-skillmd) | `skill-metadata-map` | `metadata` is a map | objective | warn | same |
+| [S5](#s1-to-s14-skillmd) | `skill-frontmatter` | `SKILL.md` has frontmatter | objective, for upload (`preset:agentskills`: warn) | off | off |
+| [S6](#s1-to-s14-skillmd) | `skill-name-length` | `name` is 1 to 64 characters | objective, for upload (`preset:agentskills`: warn) | off | off |
+| [S7](#s1-to-s14-skillmd) | `skill-name-chars` | `name` characters | objective, for upload (`preset:agentskills`: warn) | off | off |
+| [S8](#s1-to-s14-skillmd) | `skill-name-dir` | `name` equals the directory name | objective, for upload (`preset:agentskills`: warn) | off | off |
+| [S9](#s1-to-s14-skillmd) | `skill-description` | `description` is 1 to 1024 characters | objective, for upload (`preset:agentskills`: warn) | off | off |
+| [S10](#s1-to-s14-skillmd) | `skill-compatibility` | `compatibility` is 1 to 500 characters | objective, for upload (`preset:agentskills`: warn) | off | off |
+| [S11](#s1-to-s14-skillmd) | `skill-keys` | only the specification's six frontmatter keys | objective, for upload (`preset:agentskills`: warn) | off | off |
+| [S12](#s1-to-s14-skillmd) | `skill-name-refused` | no character Claude Code refuses in `name` or the directory name | objective | warn | same |
+| [S13](#s1-to-s14-skillmd) | `skill-compaction-tokens` | the body fits the tokens Claude Code keeps after compaction (`max_tokens`, 5000) | estimate | off | warn |
+| [S14](#s1-to-s14-skillmd) | `skill-links` | a relative Markdown link points to a tracked file or directory | objective | warn | same |
+| [P1](#p1-to-p5-rule-files) | `rule-yaml` | a rule file's frontmatter is valid YAML | objective | warn | same |
+| [P2](#p1-to-p5-rule-files) | `rule-paths-type` | `paths` is a glob or a list of globs | objective | warn | same |
+| [P3](#p1-to-p5-rule-files) | `rule-paths-match` | every `paths` pattern matches a tracked file | objective | warn | same |
+| [P4](#p1-to-p5-rule-files) | `rule-paths-key` | no key that looks like a misspelt `paths` | objective match, inferred intent | warn | same |
+| [P5](#p1-to-p5-rule-files) | `rule-paths-item` | every item of the `paths` list is a string | objective | warn | same |
 | [H1](#h1-to-h6-hooks) | `settings-json` | a settings file is valid JSON and an object | objective | warn | same |
 | [H2](#h1-to-h6-hooks) | `hooks-event` | hook event names are documented ones | objective | warn | same |
 | [H3](#h1-to-h6-hooks) | `hooks-shape` | `hooks`, event lists, matcher groups and handler lists have the documented shape | objective | warn | same |
@@ -292,7 +299,7 @@ Malformed directives get no fix.
 
 Measured: objective, so no false-positive rate.
 
-## S1 to S12 SKILL.md
+## S1 to S14 SKILL.md
 
 Why: a `SKILL.md` has two kinds of reader, and they disagree. Claude Code ignores a frontmatter field
 it does not know, takes a `name` that differs from the directory (or no `name` at all), and when the
@@ -320,7 +327,12 @@ it protects, and the default preset turns on the ids for Claude Code:
 | S11 | upload (`preset:agentskills`) | a top-level key outside the six | Claude Code, "Using skill frontmatter outside Claude Code" |
 | S12 | Claude Code (default) | `name`, or the name of the directory that holds the file, has a character Claude Code refuses: `<` or `>`; a control or format character (zero-width, direction-changing); a private-use or unassigned character; a blank other than a plain space; a space at the start or end or two in a row | Claude Code, "Characters a skill name can't hold": a refused `name` is not shown in the `/` menu and does not invoke the skill; a refused directory name keeps the skill from loading, except in a plugin's `skills/`, where the characters become hyphens |
 
-Default: S1 to S4 and S12 at `warn`, S5 to S11 `off` (Claude Code accepts what they report). A
+| S13 | Claude Code (`preset:strict`) | the body (the file without its frontmatter) is estimated at more than `max_tokens` (default 5000) tokens (whole file) | Claude Code, "Skill content lifecycle": after compaction it re-attaches each invoked skill, "keeping the first 5,000 tokens of each" |
+
+| S14 | both (default) | an inline Markdown link in the body whose relative target is not a tracked file or directory | specification, "File references": "When referencing other files in your skill, use relative paths from the skill root"; the link is how a skill sends the agent to its reference files |
+
+Default: S1 to S4, S12 and S14 at `warn`, S5 to S11 `off` (Claude Code accepts what they report), S13
+`off` (an estimate; `preset:strict` sets it to `warn`). A
 repository that uploads its skills to claude.ai or the Skills API adds
 `extends = ["preset:agentskills"]`, which sets S5 to S11 to `warn` and combines with `preset:strict`
 in either order; a single id can also be turned on with its level or a raising override, and an id
@@ -346,6 +358,20 @@ Readings:
 - S3's limit is `[rules.S3] max_chars`, default 1536, Claude Code's default for its
   `skillListingMaxDescChars` setting; this tool does not read Claude Code settings, so a repository
   that changed the setting sets the same value here.
+- S13 has no tokenizer: it counts four ASCII characters or one other character as a token, which is
+  near English prose and code (about four characters a token) and near CJK text (about one). The real
+  count depends on the model, so the rule is off by default and never more than a hint that the end
+  of a long skill is what a compacted session loses. `[rules.S13] max_tokens` changes the limit.
+- S14 reads inline links (`[text](target)`, with or without a title) in the body, outside fenced
+  code, code spans and HTML comments. The target is resolved from the directory of the `SKILL.md`,
+  after removing `#fragment` and `?query` and decoding `%20`; it must be a tracked file or a
+  directory that holds one, with the same letter case (a checkout on Linux is case-sensitive). Not
+  read: images, reference-style links, a link whose `[` is escaped, a target with a URL scheme, an anchor, a leading `/`, a
+  placeholder (`{`, `<`, `$`), a bare word without `/` or `.` (`[text](url)` in an example), and a
+  target outside the repository, below a tracked symlink or submodule, or in a directory a
+  `--no-git` walk skips. Indented code blocks are read like prose (a nested list is indented the same
+  way), so an example link there is reported. A link that leaves the skill's own directory is not reported when
+  its target exists, although it breaks once the skill is installed on its own.
 - S10 also reports an empty string, which the specification excludes and `skills-ref` accepts.
 - S12 follows the documented list; which code points count as unassigned follows the Unicode version
   of the Python that runs the check.
@@ -362,6 +388,92 @@ files. Compared file by file with `skills-ref` (which fails 929 files), 1435 fil
 verdict and the same checks; the other 260 all use a flow collection that strictyaml rejects (S1
 there, valid YAML here, so those files show only their other findings, mostly S11). R and C findings
 on the sample are the same as 0.8.0's.
+
+S14 on the same sample (2026-11-13; 1305 relative links in the 1695 files): 34 findings in 3
+repositories, read one by one, all real. 23 are in skills copied into another tool's directory with
+their links left as they were, 6 point to a sibling skill that does not exist, and 5 are the tail of a
+web URL written as a relative path. Four other candidate checks counted on the sample the same day
+found nothing and were not built: relative links in instruction files (436 links), `@path` imports
+(17), subagent frontmatter (4 files) and hook commands that name a script in the repository (3).
+
+## P1 to P5 rule files
+
+Why: a Markdown file in `.claude/rules/` loads in every session unless its frontmatter has `paths`,
+and then only once Claude reads a file a pattern matches
+([Claude Code memory](https://code.claude.com/docs/en/memory), "Organize rules with `.claude/rules/`").
+A mistake in the frontmatter is never an error: the file silently gets the other behaviour than the
+one written. Either a rule meant for one directory is in every session's context, or a rule is never
+loaded at all. Each id is one such case:
+
+| Id | Finding | What Claude Code does |
+|---|---|---|
+| P1 | the frontmatter is not valid YAML even after Claude Code's second attempt (below; reported at the parse error's line) or has no closing `---` | "If the YAML between the markers doesn't parse, Claude Code ignores the frontmatter and loads the rule as if it had no `paths`" |
+| P2 | `paths` holds no pattern: a number, a boolean, a mapping, no value, an empty string, an empty list or a list without a string | the rule loads in every session |
+| P3 | a `paths` pattern matches no tracked file | the rule never loads through that pattern |
+| P4 | there is no `paths`, but a key in `[rules.P4] keys` (default `path`, `glob`, `globs`) or `paths` in another case (`Paths`) | "`paths` is the only field Claude Code reads from a rule; any other field is ignored without an error": the rule loads in every session |
+| P5 | one or more items of the `paths` list are not strings, and at least one is | those items are ignored; the other patterns work |
+
+Every row was measured with Claude Code 2.1.323 in a temporary git
+repository: one rule file per case, each with its own marker text, and a headless session asked which
+markers it has, once at launch and once after reading a file the patterns match. The same runs gave
+the pattern readings below.
+
+Readings:
+
+- Runs on instruction files inside a `.claude/rules/` directory at any depth (the default globs
+  discover them; a symlink in `.claude/rules/` is read through the link). A rule file without
+  frontmatter, or without `paths` and without a look-alike key, is the documented always-on form and
+  reports nothing.
+- Patterns are relative to the directory that holds the rule's `.claude` folder, as documented.
+- Claude Code parses a frontmatter twice. When the YAML does not parse, it puts the value of every
+  `key: value` line that does not start and end with the same quote and holds a YAML special
+  character in double quotes and
+  parses again, so `paths: **/*.ts` and `paths: {src,lib}/**`, which are not valid YAML, work and are
+  not reported, and neither is a broken value of another key (`description: [draft`). The second
+  attempt does not reach list items: `- **/*.ts` under `paths:` is P1 (measured: the rule loads in
+  every session). Quote patterns in a list.
+- `paths` is a YAML list or a comma-separated string; a comma inside braces belongs to its pattern
+  (`"docs/**, src/**/*.{js,ts}"` is two patterns).
+- A pattern is read as Claude Code reads it: without a slash it matches at any depth (`*.ts`), a
+  leading `/` anchors it to the base directory, `*` and `?` stay inside one directory, a `**`
+  segment crosses directories (beside other characters, as in `a**b`, it is a `*`), `{a,b}` expands,
+  `[abc]` is a bracket expression, letter case is ignored (`SRC/**` matches `src/`; measured on
+  macOS), and a pattern that matches a directory matches every file in it (`src`, `src/`), while a
+  trailing `/` on a file's name matches nothing. A `[` that opens no bracket expression matches
+  nothing, as documented, and so does a pattern that starts with `./` (measured).
+- Scalars follow the YAML 1.2 core schema, as Claude Code's reader does: `paths: yes` is the pattern
+  `yes` (P3 when no file has that name), not a boolean; `paths: 123` and `paths: 1e3` are numbers
+  (P2) and `paths: "123"` is a pattern.
+- P3 is skipped for a pattern in a syntax this tool does not read (a leading `!`, extended globs such
+  as `@(a|b)`, POSIX classes such as `[[:alpha:]]` and set operators such as `[a--b]` in a bracket
+  expression). Brace expansion follows Claude Code's documented
+  budget: the patterns of one `paths` list share 1,000 expanded patterns, and a pattern that would
+  pass it is used unexpanded, its braces literal.
+- P3 looks at tracked files (with `--no-git`, the walked files). A pattern for files that are
+  generated or ignored (`dist/**`) matches none of them: turn P3 off for that rule file with an
+  override, or accept the entry in the allowlist. Per-line directives cannot name P ids: their
+  findings are on frontmatter lines, where a comment cannot be written.
+- P4 infers intent: `globs` is the key other tools use for the same purpose. A rule file that sets
+  both `paths` and such a key is not reported. `keys = []` leaves only the case check.
+- Not checked: rule files in `~/.claude/rules/` (outside the repository), and whether a symlink's
+  target is outside the working directory (Claude Code asks for approval before loading those).
+
+The measurements above are of rule files in the root `.claude/rules/`. A rule file in a
+subdirectory's `.claude/rules/` loads on demand, not at launch (documented, not measured here: "rules
+that load on demand, including path-scoped rules and rules in nested `.claude/rules/` directories"),
+so for those files "loads in every session" in the table reads "loads without its path scope", which
+is what the finding says.
+
+Measured: objective except P4's intent. On the 22-repository sample of docs/field-report.md
+(2026-11-13) only 2 repositories have rule files, 7 in all: P4 reports 5 of them, all in one
+repository and all real (a `globs` list of patterns under a `description`, the form another tool
+reads; Claude Code applies none of the patterns), and P1, P2, P3 and P5 report nothing. On three
+private repositories that use rule files (20 rule files, 36 `paths` patterns): no P finding; every
+pattern matches a tracked file.
+
+S13 on the same sample with `preset:strict`: 136 of the 1695 `SKILL.md` files in 8 repositories are
+estimated over 5,000 tokens (from 5,015 to 17,997, median 6,068); 92 of them are in one repository.
+The estimate was not compared with a tokenizer.
 
 ## H1 to H6 hooks
 
@@ -448,5 +560,6 @@ sample sits in a plugin directory, in the plugin format, and is not matched.
 ## Rule ids for other files
 
 Rules for other file types get an id prefix per family, so ids stay unique as checks are added: `S` for
-`SKILL.md`, `H` for hooks in settings files and `M` for `.mcp.json` (above). `R` and `C` stay with
+`SKILL.md`, `H` for hooks in settings files, `M` for `.mcp.json` and `P` for the `paths` frontmatter
+of rule files (above). `R` and `C` stay with
 instruction files, and `E` is reserved for input errors such as `E0`.

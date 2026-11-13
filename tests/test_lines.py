@@ -71,6 +71,11 @@ class ConfigJsonTest(unittest.TestCase):
                 self.assertEqual([doc["rules"].pop(f"H{i}") for i in range(1, 7)], [{"level": "warn"}] * 6)
                 self.assertEqual([doc["rules"].pop(f"M{i}") for i in range(1, 5)], [{"level": "warn"}] * 4)
                 self.assertEqual(doc["rules"].pop("R1e")["level"], "warn")
+                # After 0.9.0: rule files (P1 to P5) and the compaction estimate (S13, strict only).
+                self.assertEqual([doc["rules"].pop(f"P{i}")["level"] for i in (1, 2, 3, 5)], ["warn"] * 4)
+                self.assertEqual(doc["rules"].pop("P4"), {"level": "warn", "keys": ["path", "glob", "globs"]})
+                self.assertEqual(doc["rules"].pop("S14"), {"level": "warn"})
+                self.assertEqual(doc["rules"].pop("S13"), {"level": "warn" if preset == "strict" else "off", "max_tokens": 5000})
                 # 0.9.0 also changes one value (Changed (breaking)): two more default globs.
                 globs = doc["discover"]["globs"]
                 self.assertEqual(globs[4:], ["**/CLAUDE.local.md", "**/.claude/rules/**/*.md"])

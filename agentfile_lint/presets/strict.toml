@@ -1,6 +1,6 @@
 # preset:strict -- the default preset plus the heuristic rules and the C1 convention, all as warnings.
 # Use it with `extends = ["preset:strict"]`; a repository config can still override single keys.
-# These rules guess (R3b, R4a, R4b, R6) or check a convention (C1, R5b), so they are off in
+# These rules guess (R3b, R4a, R4b, R6), estimate (S13) or check a convention (C1, R5b), so they are off in
 # the default preset; docs/rules.md lists their measured false-positive rates.
 # Like every file a config extends, it is a change on top of preset:default, which applies once.
 
@@ -24,4 +24,7 @@ level = "warn"
 level = "warn"
 
 [rules.C1]
+level = "warn"
+
+[rules.S13]
 level = "warn"

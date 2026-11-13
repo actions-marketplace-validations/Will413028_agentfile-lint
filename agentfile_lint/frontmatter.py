@@ -6,7 +6,8 @@ With `strings=True` the block is only composed (grammar, anchors and aliases, ne
 constructor) and every scalar is its text: `yes` and `2026-02-30` stay strings, as YAML 1.2 readers
 read them, and so does `12`, as strictyaml reads it (YAML 1.1 and the YAML 1.2 core schema read the
 integer 12). Merge keys (`<<`) are applied; a duplicate key or a key that is not a scalar is an error,
-as in YAML 1.2 readers. `keys` gives the line of each top-level key. Used by the SKILL.md rules.
+as in YAML 1.2 readers. `keys` gives the line of each top-level key and `plain` says which top-level
+values were written without quotes. Used by the SKILL.md and rule-file rules.
 """
 from __future__ import annotations
 
@@ -27,6 +28,9 @@ class Frontmatter:
     column: int = 1             # 1-based column of the error
     end: int = 0                # 1-based line of the closing `---`; 0 when unterminated
     keys: dict[str, int] = field(default_factory=dict)  # `strings=True`: top-level key -> 1-based file line
+    # `strings=True`: top-level key -> True for a plain (unquoted, not block) scalar, for a sequence one
+    # such bool per item, else False. A plain scalar is where a typed reader may see a number or null.
+    plain: dict[str, object] = field(default_factory=dict)
 
 
 def split(text: str) -> tuple[str, int] | None:
@@ -87,23 +91,31 @@ def _plain(node: object, memo: dict[int, object]) -> object:
     return out
 
 
-def _as_strings(body: str) -> tuple[object, dict[str, int]]:
+def _is_plain(node: object) -> object:
+    if isinstance(node, _yaml.SequenceNode):
+        return [isinstance(item, _yaml.ScalarNode) and item.style is None for item in node.value]
+    return isinstance(node, _yaml.ScalarNode) and node.style is None
+
+
+def _as_strings(body: str) -> tuple[object, dict[str, int], dict[str, object]]:
     node = _yaml.compose(body, Loader=_yaml.SafeLoader)
     if node is None:
-        return None, {}
+        return None, {}, {}
     value = _plain(node, {})
     keys: dict[str, int] = {}
+    plain: dict[str, object] = {}
     if isinstance(node, _yaml.MappingNode):
         merge_line = None
-        for key, _ in node.value:   # keys are scalars by now
+        for key, item in node.value:   # keys are scalars by now
             if key.tag == MERGE_TAG:
                 merge_line = merge_line or key.start_mark.line + 2
             else:
                 keys.setdefault(key.value, key.start_mark.line + 2)
+                plain.setdefault(key.value, _is_plain(item))
         if merge_line is not None and isinstance(value, dict):
             for k in value:
                 keys.setdefault(k, merge_line)
-    return value, keys
+    return value, keys, plain
 
 
 def parse(text: str, strings: bool = False) -> Frontmatter | None:
@@ -117,8 +129,9 @@ def parse(text: str, strings: bool = False) -> Frontmatter | None:
         return Frontmatter(error="frontmatter has no closing '---' line")
     try:
         keys: dict[str, int] = {}
+        plain: dict[str, object] = {}
         if strings:
-            value, keys = _as_strings(body)
+            value, keys, plain = _as_strings(body)
         else:
             value = _yaml.load(body, Loader=_yaml.SafeLoader)
     except _yaml.MarkedYAMLError as exc:
@@ -144,4 +157,4 @@ def parse(text: str, strings: bool = False) -> Frontmatter | None:
         # SafeLoader's scalar constructors raise these on values that pass the grammar but not the
         # conversion: `2026-02-30`, `!!int abc`, `!!timestamp foo`, integers over Python's digit limit.
         return Frontmatter(error="invalid YAML: cannot convert a value: " + str(exc).split("\n")[0], end=end)
-    return Frontmatter(value=value, end=end, keys=keys)
+    return Frontmatter(value=value, end=end, keys=keys, plain=plain)

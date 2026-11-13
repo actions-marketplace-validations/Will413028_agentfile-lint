@@ -10,7 +10,8 @@ def normalize_newlines(raw: str) -> str:
 
 
 class Context:
-    def __init__(self, root: Path, tracked: list[str], raw: dict[str, str]):
+    def __init__(self, root: Path, tracked: list[str], raw: dict[str, str],
+                 family_files: dict[str, dict[str, str]] | None = None):
         self.root = root
         self.tracked = tracked          # every `git ls-files` entry, or every walked file with `--no-git`
         # Analyzed instruction files (valid UTF-8), read once by the engine: path -> text as stored on
@@ -18,6 +19,8 @@ class Context:
         self.raw = raw
         self.files = {path: normalize_newlines(text) for path, text in raw.items()}
         self.tracked_set = set(tracked)
+        # Analyzed files of the other file families: family -> path -> text, newlines normalized.
+        self.family_files = family_files or {}
         self.dirs = {""}                # every directory that holds a tracked file ("" is the root)
         for path in tracked:
             for parent in PurePosixPath(path).parents:
