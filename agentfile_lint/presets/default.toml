@@ -13,6 +13,8 @@ extends = []
 globs = ["AGENTS.md", "**/AGENTS.md", "CLAUDE.md", "**/CLAUDE.md", "**/CLAUDE.local.md", "**/.claude/rules/**/*.md"]
 # SKILL.md files are a family of their own: only the S rules run on them, and R and C rules never do.
 skill_globs = ["**/SKILL.md"]
+# Claude Code subagent files (A rules): every .md under a .claude/agents/ directory.
+agents_globs = ["**/.claude/agents/**/*.md"]
 # Claude Code settings files (H rules): read from the directory a session starts in, at any depth.
 hooks_globs = ["**/.claude/settings.json", "**/.claude/settings.local.json"]
 # Project MCP servers (M rules): only the repository root's .mcp.json.
@@ -302,9 +304,9 @@ keys = ["path", "glob", "globs"]
 level = "warn"
 
 # ---------------------------------------------------------------------------------------------
-# H1 to H6: hooks in Claude Code settings files; M1 to M4: .mcp.json (docs/rules.md, "H1 to H6
+# H1 to H9: hooks in Claude Code settings files; M1 to M4: .mcp.json (docs/rules.md, "H1 to H9
 # hooks" and "M1 to M4 .mcp.json"). Only what the Claude Code docs state and what makes Claude Code
-# skip the file or an entry; optional fields and other keys are not checked.
+# skip the file or an entry; optional fields are not checked, and of the other keys only H9's.
 # ---------------------------------------------------------------------------------------------
 [rules.H1]
 level = "warn"
@@ -322,6 +324,78 @@ level = "warn"
 level = "warn"
 
 [rules.H6]
+level = "warn"
+
+# H7 and H8: the program a command hook names inside the project. `project_dir` lists the spellings
+# of the project directory a command may use; a repository whose hooks use another variable for the
+# same directory adds it, as written in the command. A hook with `args` (exec form) runs without a
+# shell: there only `${CLAUDE_PROJECT_DIR}` is read, whatever this list holds.
+[shared.hooks]
+project_dir = ["$CLAUDE_PROJECT_DIR", "${CLAUDE_PROJECT_DIR}"]
+
+[rules.H7]
+level = "warn"
+
+[rules.H8]
+level = "warn"
+
+# H9 `keys`: top-level keys that are not settings, each with the place where Claude Code reads it.
+# Not a list of every unknown key: only keys that work somewhere else and were measured to do
+# nothing here, so the mistake is the place. A repository's `[rules.H9.keys]` adds keys; `ignore`
+# names shipped keys it does not want reported. Only files named `settings.json` or
+# `settings.local.json` are read.
+[rules.H9]
+level = "warn"
+ignore = []
+
+[rules.H9.keys]
+defaultMode = "`permissions.defaultMode`"
+deny = "`permissions.deny`"
+disallowedTools = "`permissions.deny` (`disallowedTools` is a command-line flag and a subagent field)"
+mcpServers = "the project's `.mcp.json`"
+
+# ---------------------------------------------------------------------------------------------
+# A1 to A7: Claude Code subagent files (docs/rules.md, "A1 to A7 subagent files"). A file Claude Code
+# cannot read as a subagent is not an error anywhere; the subagent is just not offered. A2 `ignore`:
+# globs of files in an agents directory that are not subagents.
+# ---------------------------------------------------------------------------------------------
+[rules.A1]
+level = "warn"
+
+[rules.A2]
+level = "warn"
+ignore = ["**/README.md"]
+
+[rules.A3]
+level = "warn"
+
+[rules.A4]
+level = "warn"
+
+[rules.A5]
+level = "warn"
+
+# A6 and A7 share `[shared.agents]`. `tools`: the names a subagent's `tools` and `disallowedTools` may hold. The tools reference of Claude Code
+# (code.claude.com/docs/en/tools-reference, read 2026-11-14), plus `Task` (the old name of `Agent`),
+# `DesignSync` and `ReadMcpResourceDirTool`, which 2.1.325 accepts. `*` and `mcp__` names are never
+# reported. A repository that uses a tool this list lacks names it in `extend_tools`.
+[shared.agents]
+extend_tools = []
+tools = [
+    "Agent", "Artifact", "AskUserQuestion", "Bash", "CronCreate", "CronDelete", "CronList", "DesignSync",
+    "Edit", "EndConversation", "EnterPlanMode", "EnterWorktree", "ExitPlanMode", "ExitWorktree", "Glob",
+    "Grep", "ListAgents", "ListMcpResourcesTool", "LSP", "Monitor", "NotebookEdit", "PowerShell",
+    "PushNotification", "Read", "ReadMcpResourceDirTool", "ReadMcpResourceTool", "RemoteTrigger",
+    "ReportFindings", "ScheduleWakeup", "SendFeedback", "SendMessage", "SendUserFile",
+    "ShareOnboardingGuide", "Skill", "SubagentHandback", "Task", "TaskCreate", "TaskGet", "TaskList",
+    "TaskOutput", "TaskStop", "TaskUpdate", "TodoWrite", "ToolSearch", "WaitForMcpServers", "WebFetch",
+    "WebSearch", "Workflow", "Write",
+]
+
+[rules.A6]
+level = "warn"
+
+[rules.A7]
 level = "warn"
 
 [rules.M1]

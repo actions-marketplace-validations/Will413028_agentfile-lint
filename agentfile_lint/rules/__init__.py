@@ -21,9 +21,9 @@ Rules read parameters only; repo-specific behaviour is configuration, never a br
 """
 from __future__ import annotations
 
-from . import claude_md, constants, duplicate, hooks, mcp, paths, rot, rule_files, shape, size, skill, specrefs, testnames
+from . import agents, claude_md, constants, duplicate, hooks, mcp, paths, rot, rule_files, shape, size, skill, specrefs, testnames
 
-MODULES = (size, shape, testnames, paths, specrefs, rot, duplicate, constants, claude_md, rule_files, skill, hooks, mcp)
+MODULES = (size, shape, testnames, paths, specrefs, rot, duplicate, constants, claude_md, rule_files, skill, agents, hooks, mcp)
 
 # rule id -> its module, in report order.
 RULES = {rule_id: module for module in MODULES for rule_id, _, _ in module.CHECKS}
@@ -36,11 +36,12 @@ if len(ALIASES) != len(RULES) or set(ALIASES) & set(RULES):
     raise RuntimeError("rule names must be unique and must not equal a rule id")
 
 INSTRUCTION = "instruction"
-# Every file family, in discovery order: instruction files, SKILL.md, hooks settings, .mcp.json.
-FAMILIES = (INSTRUCTION, "skill", "hooks", "mcp")
+# Every file family, in discovery order: instruction files, SKILL.md, subagent files, hooks settings, .mcp.json.
+FAMILIES = (INSTRUCTION, "skill", "agents", "hooks", "mcp")
 # File family -> what its files are, for messages.
 FAMILY_FILES = {
-    INSTRUCTION: "instruction files", "skill": "SKILL.md files", "hooks": "Claude Code settings files",
+    INSTRUCTION: "instruction files", "skill": "SKILL.md files", "agents": "subagent files",
+    "hooks": "Claude Code settings files",
     "mcp": ".mcp.json files",
 }
 # rule module -> the file family it checks.

@@ -1,4 +1,4 @@
-"""Run the enabled rules over the full set of each file family (instruction, skill, hooks, mcp files)."""
+"""Run the enabled rules over the full set of each file family (instruction, skill, subagent, hooks, mcp files)."""
 from __future__ import annotations
 
 import datetime

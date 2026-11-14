@@ -57,12 +57,22 @@ new ids.
 | [P3](#p1-to-p5-rule-files) | `rule-paths-match` | every `paths` pattern matches a tracked file | objective | warn | same |
 | [P4](#p1-to-p5-rule-files) | `rule-paths-key` | no key that looks like a misspelt `paths` | objective match, inferred intent | warn | same |
 | [P5](#p1-to-p5-rule-files) | `rule-paths-item` | every item of the `paths` list is a string | objective | warn | same |
-| [H1](#h1-to-h6-hooks) | `settings-json` | a settings file is valid JSON and an object | objective | warn | same |
-| [H2](#h1-to-h6-hooks) | `hooks-event` | hook event names are documented ones | objective | warn | same |
-| [H3](#h1-to-h6-hooks) | `hooks-shape` | `hooks`, event lists, matcher groups and handler lists have the documented shape | objective | warn | same |
-| [H4](#h1-to-h6-hooks) | `hooks-type` | every hook handler has a documented `type` | objective | warn | same |
-| [H5](#h1-to-h6-hooks) | `hooks-required` | every hook handler has its type's required fields | objective | warn | same |
-| [H6](#h1-to-h6-hooks) | `hooks-empty-command` | a command hook's `command` is not empty | objective | warn | same |
+| [H1](#h1-to-h9-hooks) | `settings-json` | a settings file is valid JSON and an object | objective | warn | same |
+| [H2](#h1-to-h9-hooks) | `hooks-event` | hook event names are documented ones | objective | warn | same |
+| [H3](#h1-to-h9-hooks) | `hooks-shape` | `hooks`, event lists, matcher groups and handler lists have the documented shape | objective | warn | same |
+| [H4](#h1-to-h9-hooks) | `hooks-type` | every hook handler has a documented `type` | objective | warn | same |
+| [H5](#h1-to-h9-hooks) | `hooks-required` | every hook handler has its type's required fields | objective | warn | same |
+| [H6](#h1-to-h9-hooks) | `hooks-empty-command` | a command hook's `command` is not empty | objective | warn | same |
+| [H7](#h1-to-h9-hooks) | `hooks-command-path` | a script a hook command runs from the project directory exists | objective | warn | same |
+| [H8](#h1-to-h9-hooks) | `hooks-command-exec` | a script a hook command runs directly has execute permission | objective | warn | same |
+| [H9](#h1-to-h9-hooks) | `settings-misplaced-key` | a settings file has no top-level key that belongs somewhere else | objective | warn | same |
+| [A1](#a1-to-a7-subagent-files) | `agent-yaml` | a subagent file's frontmatter is valid YAML and a mapping | objective | warn | same |
+| [A2](#a1-to-a7-subagent-files) | `agent-frontmatter` | a subagent file has frontmatter | objective, `ignore` for files that are not subagents | warn | same |
+| [A3](#a1-to-a7-subagent-files) | `agent-name` | a subagent file has a `name` | objective | warn | same |
+| [A4](#a1-to-a7-subagent-files) | `agent-description` | a subagent file has a `description` | objective | warn | same |
+| [A5](#a1-to-a7-subagent-files) | `agent-duplicate-name` | no two subagent files in one agents directory share a `name` | objective | warn | same |
+| [A6](#a1-to-a7-subagent-files) | `agent-tools` | every entry of a subagent file's `tools` names a tool Claude Code knows | objective | warn | same |
+| [A7](#a1-to-a7-subagent-files) | `agent-disallowed-tools` | every entry of a subagent file's `disallowedTools` names a tool Claude Code knows | objective | warn | same |
 | [M1](#m1-to-m4-mcpjson) | `mcp-json` | `.mcp.json` is valid JSON and an object | objective | warn | same |
 | [M2](#m1-to-m4-mcpjson) | `mcp-servers` | servers sit under an `mcpServers` object | objective | warn | same |
 | [M3](#m1-to-m4-mcpjson) | `mcp-type` | every server entry is an object with a documented `type` | objective | warn | same |
@@ -475,7 +485,7 @@ S13 on the same sample with `preset:strict`: 136 of the 1695 `SKILL.md` files in
 estimated over 5,000 tokens (from 5,015 to 17,997, median 6,068); 92 of them are in one repository.
 The estimate was not compared with a tokenizer.
 
-## H1 to H6 hooks
+## H1 to H9 hooks
 
 Why: Claude Code reads hooks from the `hooks` key of its settings files, and a hook it cannot load
 does not run, usually without a sign during the session: Claude Code reports it at startup or in
@@ -495,6 +505,9 @@ rules run on these files.
 | H4 | a handler has no `type`, or one other than `command`, `http`, `mcp_tool`, `prompt`, `agent` | hooks reference, "Common fields": `type` required | ignores the handler |
 | H5 | a handler lacks a field its type marks required, or has it as a non-string: `command` (command), `url` (http), `server` and `tool` (mcp_tool), `prompt` (prompt, agent) | hooks reference, "Hook handler fields" tables | ignores the handler |
 | H6 | a command hook's `command` is empty or blank | hooks reference, `command`: "Shell command to execute" | loads it without a warning; it runs no program |
+| H7 | a command runs a script under the project directory (after `$CLAUDE_PROJECT_DIR` or another spelling in `[shared.hooks] project_dir`; in exec form only after `${CLAUDE_PROJECT_DIR}`) that is neither tracked nor on disk | hooks reference, "Reference scripts by path"; "when the script path doesn't exist or isn't executable, the shell exits with a code like 127 [...] a hook that can't start is a non-blocking error" | the hook does not run and the action goes ahead (measured by running a headless session on 2.1.323, which printed nothing about it) |
+| H8 | such a script is the program of one of the command's simple commands, so it is run directly, and the file has no execute permission | the same sentences | the same (measured the same way); through an interpreter (`bash "$CLAUDE_PROJECT_DIR"/x.sh`) it runs |
+| H9 | a top-level key of the file is in `[rules.H9] keys`: a key that works in another place (`defaultMode`, `deny`, `disallowedTools`, `mcpServers`), in a file named `settings.json` or `settings.local.json` | [settings reference](https://code.claude.com/docs/en/settings-reference): none of them is a top-level setting; `defaultMode` and `deny` are keys of `permissions`, and project MCP servers are read from `.mcp.json` | ignores the key without a warning (measured on 2.1.325; `claude doctor` says nothing) |
 
 Under `PreToolUse` and `PermissionRequest`, an H3 to H5 failure is wider: `claude doctor` says such a
 hook "may be what guards the permissions declared beside it, so nothing it sits in is applied until the
@@ -508,11 +521,56 @@ Readings:
   message that it was not checked.
 - Positions are JSON paths in the form `claude doctor` prints (`hooks.PreToolUse.0.hooks.1`); the line
   is the whole file except for H1's syntax error.
+- H7 and H8 judge only the script a command runs: the program of one of its simple commands (after
+  `VAR=value` words, shell keywords such as `if` and `then`, and `exec`, `command`, `nohup`, `time`,
+  `env`), or the first word that is not a flag after `bash`, `sh`, `zsh`, `dash`, `ksh`, `python`,
+  `python3`, `node`, `bun`, `deno`, `ruby`, `perl`, `pwsh`, `source` or `.`, unless a flag before it
+  makes the argument code or a module (a short flag holding `c`, `e`, `m` or `p` such as `-c`, `-lc`
+  or `-pe`, `--eval`, `--print`, `-Command`, a bare `-`; after a shell only a flag holding `c` or `s`, so
+  `bash -e script` is read). A program that is itself a script under the project directory and
+  named like an interpreter (`"$CLAUDE_PROJECT_DIR"/.venv/bin/python`) is read both ways. The text of a here-document is not read. Arguments of other programs, redirection targets and files the command
+  creates are not judged, and neither is a script the same command tests first
+  (`[ -x "$CLAUDE_PROJECT_DIR"/opt.sh ] && "$CLAUDE_PROJECT_DIR"/opt.sh`). H8 is for the program
+  position only. The script's word must be a project-directory spelling, then `/`, then the path:
+  `"$CLAUDE_PROJECT_DIR"/.claude/hooks/x.sh`, with the quotes anywhere a shell allows them (a quoted
+  path may hold spaces). A spelling in single quotes or after a backslash is not expanded by the
+  shell and is not read. The project directory is the one that holds the settings file's `.claude`
+  folder. A path with a shell expansion of its own (`$NAME`, `*`, `~`, backticks) or a backslash
+  inside quotes, a relative path (it depends on
+  the directory the hook runs in), a path outside the repository and any other variable are not
+  judged. A repository whose hooks spell the project
+  directory another way lists that spelling: `[shared.hooks] project_dir = ["${APP_ROOT:-$HOME/app}"]`
+  replaces the default two. A file that exists on disk but is not tracked counts as there: a script a
+  setup step generates is reported only where it has not been generated, such as a fresh clone in CI.
+  H8 looks at the file on disk and is skipped on Windows, which has no execute permission.
+- Exec form: a hook with an `args` list runs without a shell (hooks reference, "Exec form and shell
+  form"; measured on 2.1.325). `command` is then the program exactly as written, not split into
+  words, and each element of `args` is one argument, so H7 and H8 read the whole `command` as the
+  program and, after an interpreter, the first element of `args` that is not a flag; the finding
+  names the element (`hooks.Stop.0.hooks.1.args.0`). A wrapper program (`env`, `nohup`, `time`,
+  by name or path) is followed into `args`; words only a shell understands (`exec`, `source`,
+  `if`) are not programs there. Only
+  `${CLAUDE_PROJECT_DIR}` is substituted there: `$CLAUDE_PROJECT_DIR` without braces and the
+  spellings of `[shared.hooks] project_dir` stay literal text and name no script. An empty `args`
+  list is still exec form. A hook whose `args` is not a list of strings (`null`, a string, a
+  list holding a number) is not read: Claude Code ignores the hook ("Invalid command hook", measured).
+- H9, measured on 2.1.325 in a temporary git repository: with `"defaultMode": "acceptEdits"` at the
+  top level a headless session starts in the mode it had without the file, and with the key under
+  `permissions` in `acceptEdits`; a top-level `"deny": ["Read"]` and `"disallowedTools": ["Read"]`
+  leave Read available, `permissions.deny` removes it; a server under a top-level `mcpServers` is
+  in neither the session nor `claude mcp list`. `allow`, `ask` and `allowedTools` are not in the
+  table although the settings reference has no such top-level key: a headless session applies no
+  allow rule of an untrusted project, so what they do there could not be measured. The table is
+  not a list of unknown keys: a key Claude Code does not know (`_comment`, a typo) is not
+  reported. A repository adds keys with `[rules.H9.keys]` (`name = "where it belongs"`), which
+  join the shipped ones, and drops shipped ones with `[rules.H9] ignore = ["mcpServers"]` (a name that is not in the table is a configuration error). A file
+  a repository adds to `hooks_globs` under another name is not read by H9. On the second sample,
+  61 settings files: 3 findings in 3 repositories (`defaultMode` twice, `mcpServers`).
 - Not checked: the types of optional fields (`timeout`, `async`, `args`, `if` and the rest; Claude Code
   drops a handler whose optional field has the wrong type, but following every optional field is a
   key table that changes with each Claude Code release), whether an http hook's `url` is a URL Claude
   Code accepts (it ignores the hook when not, an empty `url` included; URL parsing is not a required-field
-  check), empty `prompt`, `server` or `tool` (Claude Code loads them), other settings keys, `matcher`
+  check), empty `prompt`, `server` or `tool` (Claude Code loads them), settings keys other than H9's, `matcher`
   syntax, and hooks in plugin `hooks/hooks.json`, skill or subagent frontmatter.
 
 Per-line directives cannot name H ids (JSON has no comments); use an allowlist entry or an override.
@@ -525,6 +583,94 @@ current hooks reference documents is a bug fixed in a patch release.
 Measured: objective, so no false-positive rate. On the 22-repository sample of docs/field-report.md
 (2026-11-06), the default globs find 5 settings files in 4 repositories, all valid, with H findings
 in none; R, C and S findings are the same as before the H rules.
+
+H7 and H8 on a second sample (2026-11-14): the 60 public repositories with the most stars among
+those a code search finds with a `.claude/agents/` directory or hooks in `.claude/settings.json` (30
+of each). 39 have hooks, with 205 command hooks; 109 of the commands name a path in the repository,
+whatever the spelling.
+H7 reports 8, all in one repository whose hook scripts are git-ignored and generated by its setup
+step (true on a fresh clone, by design there); H8 reports none.
+
+## A1 to A7 subagent files
+
+Why: a Markdown file under `.claude/agents/` defines a subagent Claude can delegate to
+([subagents](https://code.claude.com/docs/en/sub-agents)). A file Claude Code cannot read as one is
+not an error anywhere: the subagent is missing from the list Claude chooses from, and the author
+sees nothing. Files: `[discover] agents_globs`, default `**/.claude/agents/**/*.md` (Claude Code
+reads subdirectories too; a file named `*.local.md` is found only through a glob that names it, as
+for instruction files); `extend_agents_globs` adds to the list for a repository that keeps its
+subagent files elsewhere and links them in, and `agents_globs = []` turns the family off. Only the A
+rules run on these files.
+
+| Id | Finding | What Claude Code does (measured, 2.1.323; A6: 2.1.325) |
+|---|---|---|
+| A1 | the frontmatter is not valid YAML even after Claude Code's second attempt, has no closing `---`, or is not a mapping | does not load the subagent |
+| A2 | the file has no frontmatter and does not match `[rules.A2] ignore` (default `**/README.md`) | does not load it |
+| A3 | `name` is missing, empty or not a string (`name: 123`); or it starts with `-`, contains `:` or is longer than 256 characters | does not load it (the last three: documented, not measured here) |
+| A4 | `description` is missing, empty or not a string | does not load it |
+| A5 | an earlier file (in path order) of the same agents directory has the same `name` | loads only one of the two |
+| A6 | in a file A1 to A4 accept, an entry of `tools` names a tool that is in neither `[shared.agents] tools` nor `extend_tools` (names are case-sensitive) | drops the entry without a warning and runs the subagent without that tool; when no entry is left, refuses to start the subagent (measured, 2.1.325) |
+| A7 | in such a file, an entry of `disallowedTools` names a tool that is in neither list | the entry denies nothing: `disallowedTools: bash, write` leaves the subagent Bash and Write (measured, 2.1.325) |
+
+Measured in a temporary git repository: one subagent file per case, and a headless session asked
+which subagent types it has, twice with the same answer. The subagents page states the same cases
+("Claude Code skips a file [...] without reporting it in the session") and that of two files with
+one name "Claude Code loads only one of them, chosen by filesystem read order".
+
+Readings:
+
+- The frontmatter is read as Claude Code reads a rule file's (P1 to P5 above): when the YAML does
+  not parse, `key: value` lines with a YAML special character are quoted and the block is parsed
+  again. A one-line `description` with a colon in it (`Examples: user: hello`) is therefore fine;
+  one that goes on over unindented lines is A1.
+- A `name` with capitals or spaces loads and is not reported. Scalars follow YAML 1.2, as for P2.
+- A file without frontmatter is not a subagent, so a `README.md` beside the subagent files is
+  harmless; `ignore` lists the globs of such files. A `README.md` with frontmatter is a subagent to
+  Claude Code and is checked like any other.
+- A5 compares files of one agents directory: the `.claude/agents/` they are under, or their own
+  directory for files found through another glob. Which of the two Claude Code keeps was not
+  measured, and a subagent of the same name at user level or in a plugin is outside the repository.
+- A6, measured on 2.1.325 by starting a session as each subagent (`claude --agent`) and reading
+  the tools it was given, and by delegating to three of them: `tools: Read, LS, Context7, Bash`
+  gives `Read` and `Bash`; `tools: read, bash` and `tools: Context7, LS` give nothing, and the
+  Agent tool answers "would be spawned with zero tools — refusing [...] unrecognized [...]", which
+  only the calling model sees. Neither the debug log nor `claude doctor` mentions a dropped entry.
+  The subagents page says the same of a list where nothing resolves ("Claude Code usually refuses
+  to launch the subagent"). An entry is read as its name before a `(` (`Bash(git status)`,
+  `Agent(worker, researcher)`); `tools` may be a string or a YAML list, entries are separated by
+  commas or white space (`tools: Read Bash` and a list item `"Read, Bash"` both give two tools,
+  measured), and a flow list the second parse turns into a string (`[Read, Bash]`) resolves too.
+  Never reported: `*`; `mcp__` names, which depend on the servers of the session; an entry whose
+  name is not a word (`(x)`, which Claude Code drops; not measured further); and a `tools` that is
+  not a string or a list, or a list item that is not a string (`null`, `true`: no tools in a
+  `claude --agent` session, not measured as a delegated subagent). One finding names every unknown entry of the file.
+- A6's names are `[shared.agents] tools`: the
+  [tools reference](https://code.claude.com/docs/en/tools-reference) (read 2026-11-14) plus `Task`,
+  `DesignSync` and `ReadMcpResourceDirTool`, which 2.1.325 accepts; a repository adds its own names
+  with `extend_tools`, which keeps the shipped list and its updates. A tool of the reference that a
+  subagent cannot get (the page lists them) still counts as known. Keeping current: the list is
+  re-read with the H rules' sources before every minor release; a finding on a tool the current
+  tools reference documents is a bug. `LS`, `MultiEdit`, `BashOutput`, `KillShell` and
+  `SlashCommand`, tools of earlier versions, are dropped by 2.1.325 and reported.
+- A7 reads `disallowedTools` as A6 reads `tools`, with the same names (`[shared.agents]`) and the
+  same entries left alone. An entry with a specifier removes the whole tool
+  (`disallowedTools: Bash(git push *)` leaves no Bash: measured, and stated on the subagents page). An unknown name beside known ones is still reported: it was meant to take a tool away.
+  The 29 files of the second sample that have `disallowedTools` hold no unknown name.
+- Not checked: `model` and the other optional fields.
+
+Per-line directives cannot name A ids (docs/design.md, File families); use an allowlist entry or an
+override.
+
+Measured: objective, so no false-positive rate. On the second sample above, 36 repositories have
+390 subagent files. A1 reports 9 files in 2 repositories: 8 are subagents whose `description` runs
+on over unindented lines, none of which Claude Code loads, and 1 is a template with placeholders.
+A2 reports 17 files in 3 repositories: 9 are the whole subagent set of one repository, written as
+plain Markdown, 7 are test fixtures and 1 is a reference document in a subdirectory. A3, A4 and A5
+report nothing. 19 files in 8 repositories have a `description` that is not valid YAML and is read
+on the second attempt, and 16 have a `name` with capitals or spaces; neither is reported.
+A6: 206 of the files have `tools`; it reports 12 files in 5 repositories, all of them names of
+tools that no longer exist (`LS` 8 times, `MultiEdit` 7) or never did (`Context7`). Each of these
+subagents still starts, without the tool its author listed.
 
 ## M1 to M4 .mcp.json
 
@@ -560,6 +706,6 @@ sample sits in a plugin directory, in the plugin format, and is not matched.
 ## Rule ids for other files
 
 Rules for other file types get an id prefix per family, so ids stay unique as checks are added: `S` for
-`SKILL.md`, `H` for hooks in settings files, `M` for `.mcp.json` and `P` for the `paths` frontmatter
-of rule files (above). `R` and `C` stay with
+`SKILL.md`, `H` for hooks in settings files, `M` for `.mcp.json`, `A` for subagent files and `P` for
+the `paths` frontmatter of rule files (above). `R` and `C` stay with
 instruction files, and `E` is reserved for input errors such as `E0`.

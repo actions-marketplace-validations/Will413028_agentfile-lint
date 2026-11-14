@@ -29,6 +29,7 @@ class ExtendGlobsTest(unittest.TestCase):
         doc = json.loads(helpers.run_new(root, "config").stdout)
         self.assertEqual(doc["discover"], {
             "globs": ["AGENTS.md"], "extend_globs": ["A.md", "B.md"], "skill_globs": ["**/SKILL.md"], "extend_skill_globs": [],
+            "agents_globs": ["**/.claude/agents/**/*.md"], "extend_agents_globs": [],
             "hooks_globs": ["**/.claude/settings.json", "**/.claude/settings.local.json"], "extend_hooks_globs": [],
             "mcp_globs": [".mcp.json"], "extend_mcp_globs": [],
         })

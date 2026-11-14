@@ -54,7 +54,7 @@ the `vendor` subcommand writes its copy.
   Two lists concatenate along the `extends` chain instead, parents first: `[[overrides]]`, because
   replacing them would silently drop the overrides of the config a file extends (a child removes an
   inherited glob with an `unset` entry, see Overrides), and the `discover.extend_*` lists
-  (`extend_globs`, `extend_skill_globs`, `extend_hooks_globs`, `extend_mcp_globs`), each of which adds
+  (`extend_globs`, `extend_skill_globs`, `extend_agents_globs`, `extend_hooks_globs`, `extend_mcp_globs`), each of which adds
   to its family's glob list the way ruff's `extend-select` adds to `select` (a child that replaces
   `globs` keeps every inherited `extend_globs`). The shipped presets carry no overrides: a path scope belongs to one
   repository's layout.
@@ -90,7 +90,8 @@ Each rule module checks one family of files, and each family has its own glob li
 |---|---|---|---|
 | instruction | `discover.globs`, `discover.extend_globs` | `AGENTS.md`, `CLAUDE.md`, `CLAUDE.local.md` at any depth, `.md` under `.claude/rules/` | R1a to R6, C1, P1 to P5 |
 | skill | `discover.skill_globs`, `discover.extend_skill_globs` | `**/SKILL.md` | S1 to S14 |
-| hooks | `discover.hooks_globs`, `discover.extend_hooks_globs` | `**/.claude/settings.json`, `**/.claude/settings.local.json` | H1 to H6 |
+| agents | `discover.agents_globs`, `discover.extend_agents_globs` | `.md` under `.claude/agents/` at any depth | A1 to A7 |
+| hooks | `discover.hooks_globs`, `discover.extend_hooks_globs` | `**/.claude/settings.json`, `**/.claude/settings.local.json` | H1 to H9 |
 | mcp | `discover.mcp_globs`, `discover.extend_mcp_globs` | `.mcp.json` (root only) | M1 to M4 |
 
 Rules of one family never see the files of another: R2 to R6 do not run on `SKILL.md`, and R5a does
@@ -290,7 +291,7 @@ the next line of the same file (docs/adr/0006).
 - It goes in the file that reports the finding: for R5a and R5b, the file with the repeated line, not
   the ancestor or sibling it repeats.
 - Rules whose findings are about the whole file (R1a, R1b, R1c, C1) or its frontmatter (P1 to P5)
-  and rules of other file families (S1 to S14) are not accepted; use an allowlist entry or an override.
+  and rules of other file families (S1 to S14, A1 to A7, H1 to H9, M1 to M4) are not accepted; use an allowlist entry or an override.
 - The directive is ordinary text for the other rules: it counts toward R1a, R1b, R1c and R1d.
 - Directives run after overrides and before the allowlist, so a suppressed finding does not count
   toward an entry's `count`.

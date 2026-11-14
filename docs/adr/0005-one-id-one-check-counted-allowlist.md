@@ -94,7 +94,7 @@ Revisit when:
 - Users ask to name the whole old group at once: consider a group selector in addition to the ids,
   never as an alias.
 
-## Amendment (after 0.9.0): an entry's notes have the level of its rule
+## Amendment (0.10.0): an entry's notes have the level of its rule
 
 Decision 4 made every count mismatch an error, and "no longer needed" and "expired" were errors
 before it. For a rule at `warn` that made the exception stricter than the rule: a file with two

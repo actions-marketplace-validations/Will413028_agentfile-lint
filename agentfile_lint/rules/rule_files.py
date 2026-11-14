@@ -16,8 +16,9 @@ one written (measured with Claude Code 2.1.323, docs/rules.md "P1 to P5 rule fil
 and what it loses is its path scope.
 
 Runs on instruction files inside a `.claude/rules/` directory. The frontmatter is read as Claude Code
-reads it: when the YAML does not parse, the values of `key: value` lines that hold a YAML special
-character are quoted and the block is parsed again, so `paths: **/*.ts` is a pattern, not an error.
+reads it (`frontmatter.parse_as_claude_code`): when the YAML does not parse, the values of
+`key: value` lines that hold a YAML special character are quoted and the block is parsed again, so
+`paths: **/*.ts` is a pattern, not an error.
 Patterns are relative to the directory that holds that `.claude` folder: a pattern without a slash
 matches at any depth, a leading `/` anchors it, a trailing `/` names a directory, a pattern that
 matches a directory matches everything in it, `{a,b}` expands, letter case is ignored, and a
@@ -47,17 +48,6 @@ WHOLE_FILE = ("P1", "P2", "P3", "P4", "P5")
 # directory's rules. Either way the scope written in the file is not applied.
 EVERY_SESSION = "Claude Code loads the rule without a path scope (a root rule: in every session)"
 MAX_EXPANSIONS = 1000   # Claude Code's budget of expanded patterns for one `paths` list
-# A plain scalar that YAML 1.2's core schema, which Claude Code's reader follows, does not read as a string.
-_CORE_NOT_STRING = re.compile(
-    r"(?:~|null|Null|NULL|true|True|TRUE|false|False|FALSE"
-    r"|[-+]?[0-9]+|0o[0-7]+|0x[0-9a-fA-F]+"
-    r"|[-+]?(?:\.[0-9]+|[0-9]+(?:\.[0-9]*)?)(?:[eE][-+]?[0-9]+)?"
-    r"|[-+]?\.(?:inf|Inf|INF)|\.(?:nan|NaN|NAN))?\Z"
-)
-# Claude Code's second attempt at a frontmatter that does not parse: a `key: value` line whose value
-# does not start and end with the same quote and holds one of these gets the value in double quotes.
-_KEY_VALUE = re.compile(r"([A-Za-z_-]+):[ \t]+(.+?)[ \t]*\Z")
-_YAML_SPECIAL = re.compile(r"[{}\[\]*&#!|>%@`]|: ")
 # Glob syntax this module does not read: negation, extended globs, POSIX classes and set operators
 # in a bracket expression. A pattern that uses it is never reported.
 _UNREAD = re.compile(r"\A!|[@?*+!]\(|\[[^\]]*(?:\[:|--|&&|~~|\|\|)")
@@ -83,36 +73,6 @@ def base_dir(path: str) -> str | None:
     return None
 
 
-def quote_special_values(text: str) -> str:
-    """`text` with the frontmatter values Claude Code quotes before its second parse; lines keep
-    their numbers."""
-    found = frontmatter.split(text)
-    if found is None or found[1] == 0:
-        return text
-    lines = text.split("\n")
-    for i in range(1, found[1] - 1):
-        m = _KEY_VALUE.match(lines[i])
-        if m and not _quoted(m.group(2)) and _YAML_SPECIAL.search(m.group(2)):
-            escaped = m.group(2).replace("\\", "\\\\").replace('"', '\\"')
-            lines[i] = f'{m.group(1)}: "{escaped}"'
-    return "\n".join(lines)
-
-
-def _quoted(value: str) -> bool:
-    """A value Claude Code leaves alone: it starts and ends with the same quote."""
-    return len(value) > 1 and value[0] in "\"'" and value[-1] == value[0]
-
-
-def read_frontmatter(text: str) -> frontmatter.Frontmatter | None:
-    """The frontmatter as Claude Code ends up reading it; its `error` is the first parse's when the
-    second fails too."""
-    fm = frontmatter.parse(text, strings=True)
-    if fm is None or fm.error is None:
-        return fm
-    again = frontmatter.parse(quote_special_values(text), strings=True)
-    return again if again is not None and again.error is None else fm
-
-
 def check_repo(ctx: Context, params: dict[str, Any], levels: dict[str, str]) -> list[Finding]:
     found: list[Finding] = []
     candidates: dict[str, tuple[set[str], set[str]]] = {}
@@ -120,7 +80,7 @@ def check_repo(ctx: Context, params: dict[str, Any], levels: dict[str, str]) -> 
         base = base_dir(path)
         if base is None:
             continue
-        fm = read_frontmatter(text)
+        fm = frontmatter.parse_as_claude_code(text)
         if fm is None:
             continue
         if fm.error is not None:
@@ -161,25 +121,19 @@ def check_repo(ctx: Context, params: dict[str, Any], levels: dict[str, str]) -> 
     return found
 
 
-def _is_string(text: object, plain: object) -> bool:
-    """Whether a scalar is a string to a YAML 1.2 reader: a quoted or block scalar always, a plain
-    one unless the core schema reads it as null, a boolean or a number (`yes` is a string there)."""
-    return plain is not True or not _CORE_NOT_STRING.match(str(text))
-
-
 def _patterns(value: object, plain: object) -> tuple[list[str], str | None, str | None]:
     """(the patterns Claude Code uses, why `paths` holds none or None, what it ignores or None)."""
     if isinstance(value, dict):
         return [], "a mapping, not a glob or a list of globs", None
     if isinstance(value, list):
         flags = plain if isinstance(plain, list) and len(plain) == len(value) else [False] * len(value)
-        strings = [item for item, flag in zip(value, flags) if isinstance(item, str) and _is_string(item, flag)]
+        strings = [item for item, flag in zip(value, flags) if isinstance(item, str) and frontmatter.is_string(item, flag)]
         patterns = [s.strip() for s in strings if s.strip()]
         if not patterns:
             return [], "an empty list" if not value else "a list without a string", None
         skipped = len(value) - len(strings)
         return patterns, None, None if not skipped else "an item" if skipped == 1 else f"{skipped} items"
-    if not _is_string(value, plain):
+    if not frontmatter.is_string(value, plain):
         return [], "empty" if str(value) in ("", "~") or str(value).lower() == "null" else f"{value}, not a string", None
     patterns = [p.strip() for p in _split_commas(str(value)) if p.strip()]
     return patterns, None if patterns else "an empty string", None

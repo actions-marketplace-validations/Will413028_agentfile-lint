@@ -7,10 +7,15 @@ constructor) and every scalar is its text: `yes` and `2026-02-30` stay strings, 
 read them, and so does `12`, as strictyaml reads it (YAML 1.1 and the YAML 1.2 core schema read the
 integer 12). Merge keys (`<<`) are applied; a duplicate key or a key that is not a scalar is an error,
 as in YAML 1.2 readers. `keys` gives the line of each top-level key and `plain` says which top-level
-values were written without quotes. Used by the SKILL.md and rule-file rules.
+values were written without quotes. Used by the SKILL.md, rule-file and subagent rules.
+
+`parse_as_claude_code` is the reading Claude Code gives a rule file or a subagent file (measured on
+2.1.323): when the YAML does not parse, it quotes the value of every `key: value` line that holds a
+YAML special character and parses again.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from . import _yaml
@@ -158,3 +163,52 @@ def parse(text: str, strings: bool = False) -> Frontmatter | None:
         # conversion: `2026-02-30`, `!!int abc`, `!!timestamp foo`, integers over Python's digit limit.
         return Frontmatter(error="invalid YAML: cannot convert a value: " + str(exc).split("\n")[0], end=end)
     return Frontmatter(value=value, end=end, keys=keys, plain=plain)
+
+
+# A plain scalar that YAML 1.2's core schema, which Claude Code's reader follows, does not read as a string.
+_CORE_NOT_STRING = re.compile(
+    r"(?:~|null|Null|NULL|true|True|TRUE|false|False|FALSE"
+    r"|[-+]?[0-9]+|0o[0-7]+|0x[0-9a-fA-F]+"
+    r"|[-+]?(?:\.[0-9]+|[0-9]+(?:\.[0-9]*)?)(?:[eE][-+]?[0-9]+)?"
+    r"|[-+]?\.(?:inf|Inf|INF)|\.(?:nan|NaN|NAN))?\Z"
+)
+# Claude Code's second attempt at a frontmatter that does not parse: a `key: value` line whose value
+# does not start and end with the same quote and holds one of these gets the value in double quotes.
+_KEY_VALUE = re.compile(r"([A-Za-z_-]+):[ \t]+(.+?)[ \t]*\Z")
+_YAML_SPECIAL = re.compile(r"[{}\[\]*&#!|>%@`]|: ")
+
+
+def quote_special_values(text: str) -> str:
+    """`text` with the frontmatter values Claude Code quotes before its second parse; lines keep
+    their numbers."""
+    found = split(text)
+    if found is None or found[1] == 0:
+        return text
+    lines = text.split("\n")
+    for i in range(1, found[1] - 1):
+        m = _KEY_VALUE.match(lines[i])
+        if m and not _quoted(m.group(2)) and _YAML_SPECIAL.search(m.group(2)):
+            escaped = m.group(2).replace("\\", "\\\\").replace('"', '\\"')
+            lines[i] = f'{m.group(1)}: "{escaped}"'
+    return "\n".join(lines)
+
+
+def _quoted(value: str) -> bool:
+    """A value Claude Code leaves alone: it starts and ends with the same quote."""
+    return len(value) > 1 and value[0] in "\"'" and value[-1] == value[0]
+
+
+def parse_as_claude_code(text: str) -> Frontmatter | None:
+    """The frontmatter as Claude Code ends up reading it; its `error` is the first parse's when the
+    second fails too."""
+    fm = parse(text, strings=True)
+    if fm is None or fm.error is None:
+        return fm
+    again = parse(quote_special_values(text), strings=True)
+    return again if again is not None and again.error is None else fm
+
+
+def is_string(text: object, plain: object) -> bool:
+    """Whether a scalar is a string to a YAML 1.2 reader: a quoted or block scalar always, a plain
+    one unless the core schema reads it as null, a boolean or a number (`yes` is a string there)."""
+    return plain is not True or not _CORE_NOT_STRING.match(str(text))

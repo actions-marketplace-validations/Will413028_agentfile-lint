@@ -45,7 +45,7 @@ and the next release pull request conflicts with itself.
 
 1. On `dev`: move the `Unreleased` entries under `## [x.y.z] - YYYY-MM-DD`, update the version in
    `pyproject.toml` and `agentfile_lint/__init__.py`; `make check`; push and wait for CI. For a
-   minor release, first re-read the Claude Code pages docs/rules.md cites for H2 to H5, M3 and M4 and
+   minor release, first re-read the Claude Code pages docs/rules.md cites for H2 to H5, M3, M4 and A6 and
    update the lists when they changed.
 2. Open a pull request `dev` -> `main` and merge it with a merge commit once checks are green.
 3. Tag `vx.y.z` (annotated, signed) on the merge commit on `main` and note the full commit SHA for

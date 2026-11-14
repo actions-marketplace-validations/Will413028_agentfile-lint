@@ -4,7 +4,7 @@ Merge rule: tables merge key by key (the child wins); every other value, lists i
 is replaced as a whole. Two lists concatenate along the `extends` chain instead (parents first):
 `[[overrides]]`, since replacing them would silently drop the overrides of the config a file extends
 (a file removes an inherited glob with an `unset` entry), and the `discover.extend_*` lists
-(`extend_globs`, `extend_skill_globs`, `extend_hooks_globs`, `extend_mcp_globs`), which add to their
+(`extend_globs`, `extend_skill_globs`, `extend_agents_globs`, `extend_hooks_globs`, `extend_mcp_globs`), which add to their
 glob list the way ruff's `extend-select` adds to `select`.
 """
 from __future__ import annotations

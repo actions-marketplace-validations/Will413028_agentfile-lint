@@ -63,6 +63,11 @@ services/api/AGENTS.md:5: warning: R6: possible copied constant '`MAX_RETRIES = 
 | `S13` | off | warn | `SKILL.md` body within the 5,000 tokens Claude Code keeps of an invoked skill after compaction (estimated without a tokenizer) |
 | `S14` | warn | warn | a relative Markdown link in a `SKILL.md` body points to a tracked file or directory |
 | `P1`–`P5` | warn | warn | rule files in `.claude/rules/`: the frontmatter parses, `paths` is a glob or a list of globs, every pattern matches a tracked file, no look-alike key (`globs`) instead of `paths`, every list item is a string; each mistake silently loads the rule in every session or never |
+| `A1`–`A5` | warn | warn | subagent files in `.claude/agents/`: the frontmatter parses, the file has frontmatter, `name` and `description` are there, no two share a `name`; otherwise Claude Code silently does not load the subagent |
+| `A6` | warn | warn | every entry of a subagent's `tools` is a tool Claude Code knows; an unknown name is silently dropped, and a subagent with none left does not start |
+| `A7` | warn | warn | every entry of a subagent's `disallowedTools` is a tool Claude Code knows; an unknown name (`bash`) denies nothing |
+| `H9` | warn | warn | a settings file has no top-level key that only works elsewhere (`defaultMode`, `deny`, `disallowedTools`, `mcpServers`); Claude Code silently ignores it |
+| `H7`, `H8` | warn | warn | a script a hook command names under `$CLAUDE_PROJECT_DIR` exists, and has execute permission when the command runs it directly |
 | `allowlist` | as the entry's rule | as the entry's rule | exceptions: expired, no-longer-needed or miscounted (`count` above or below the findings) allowlist entries fail when their rule is an `error` on that file and warn when it is `warn` or `off`; entries warn before they expire; an override glob that matches no file warns |
 | `disable` | error | error | per-line directives: a malformed one fails, one that suppresses nothing warns |
 
@@ -112,9 +117,10 @@ checked by the H rules and the root `.mcp.json` by the M rules: that each is val
 documented event names and handler types with their required fields, that a command hook has a
 command, and that each MCP server has a known `type` and its `command` or `url`. These are the cases in
 which Claude Code skips the file or the entry, often with no sign during a session. Optional fields
-and other settings keys are not checked. `hooks_globs`/`extend_hooks_globs` and
-`mcp_globs`/`extend_mcp_globs` in `[discover]` change the file lists. Details:
-[`docs/rules.md`](docs/rules.md#h1-to-h6-hooks).
+are not checked, and of the other settings keys only the misplaced ones of H9. `hooks_globs`/`extend_hooks_globs`,
+`mcp_globs`/`extend_mcp_globs` and, for subagent files, `agents_globs`/`extend_agents_globs` in
+`[discover]` change the file lists. Details:
+[`docs/rules.md`](docs/rules.md#h1-to-h9-hooks).
 
 ### Compared with similar tools
 
